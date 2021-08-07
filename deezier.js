@@ -12,10 +12,11 @@
 
 class ElementBuilder {
   
-  static createAddedToken() {
+  static createAddedToken(inPlaylists) {
     // Create a little visual marker meaning 'already present in a playlist' 
     var token = document.createElement("div");
     token.className = "datagrid-cell cell-explicit-small";
+    token.setAttribute("title", inPlaylists.join('\n'));
     var content = document.createElement("div");
     content.className = "explicit outline small";
     content.innerHTML = "V";
@@ -32,7 +33,7 @@ class ElementBuilder {
     buttonDetectAddedTracks.library = deezierArea.library;
     return buttonDetectAddedTracks;
   }
-  
+    
 }
 
 class ElementFinder {
@@ -51,7 +52,12 @@ class ElementFinder {
     // TODO : deezer inject tracks incrementally when scrolling down, should simulate it before retrieving tracks 
     return document.getElementsByClassName("datagrid-row song");
   }
-  
+
+  static getTrackIdFromElement(songElement) {
+    var urlToParse = songElement.getElementsByClassName("datagrid-label-main title")[0].getAttribute('href');
+    return parseInt(urlToParse.substr(urlToParse.lastIndexOf('/')+1));
+  }
+
 }
 
 class MusicLibrary {
@@ -66,7 +72,7 @@ class MusicLibrary {
     // The tracks field has to be filled afterwards calling fetchTracks()
     return new Promise((resolve, reject) => {
       this.fetchPlaylists().then((p_list) => {
-        console.log("Fetched playlist : ", p_list.length);
+        console.log("Fetched", p_list.length, "playlists");
         p_list.map(p => {
           this.playlists[p.id] = {
             url: p.url,
@@ -120,6 +126,14 @@ class MusicLibrary {
     return allTracks;
   }
   
+  getPlaylistsContainingTrack(track_id) {
+    var inPlaylists = [];
+    Object.values(this.playlists).map(p => {
+      if (p.tracks.includes(track_id)) { inPlaylists.push(p.title) }
+    });
+    return inPlaylists;
+  }
+  
   display() {
     console.log("Music library for user", this.profileId, this.playlists);
   }
@@ -146,17 +160,18 @@ class DeezierArea {
   
   appendAddedTokens() {
     var tracks = ElementFinder.getTracksInPage();
-    console.log(this);
-    var tracksInLib = this.library.getAllTracks();
-    console.log("Found", tracks.length, "tracks on this page (", tracks, ") ! Check if present in the library :", tracksInLib);
+    console.log("Found", tracks.length, "tracks on this page !");
+    // TODO : not very efficient to go through the whole library for each track >:(
     for (let track of tracks) {
-      var track_id = parseInt(track.getAttribute('data-key'));
+      var track_id = ElementFinder.getTrackIdFromElement(track);
       if(track.getAttribute('deezier-token')) {
         continue  // Song already marked with a token
       }
       var titleElmt = track.querySelector(".cell-title");
-      if (tracksInLib.includes(track_id)) {
-        track.insertBefore(ElementBuilder.createAddedToken(), titleElmt);
+      // this refers here to the button itself this function was given as callback to
+      var inPlaylists = this.library.getPlaylistsContainingTrack(track_id);
+      if (inPlaylists.length) {  // track is in at least one playlist
+        track.insertBefore(ElementBuilder.createAddedToken(inPlaylists), titleElmt);
         track.setAttribute('deezier-token', 1);
       }
     }
@@ -173,13 +188,10 @@ async function process() {
   var lib = new MusicLibrary(ElementFinder.getProfileId());
   var area = new DeezierArea(lib);
   await lib.computePlaylists();
+  console.log("Retrieving tracks from all playlists in library..");
+  await lib.computeTracks();
   lib.display();
-  console.log("After computing playlist, get playlist", 9344920282, lib.getPlaylist(9344920282));
-  console.log("Retrieving tracks ..");
-  //await lib.computeTracks([9344920282]);
-    await lib.computeTracks();
-  lib.display();
-  console.log(area);
+  console.log("Injecting Deezier area in left side panel..");
   area.injectInPage();
   console.log("End Deezier process ..");
 }
