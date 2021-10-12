@@ -8,10 +8,23 @@
 // @description Make Deezer better enhancing it with new features
 // ==/UserScript==
 
+const ID_LIBRARY_ELMT = 'deezier-library';
 
 
 class ElementBuilder {
   /* Create DOM elements */
+  
+  static createElement(name, properties={}) {
+    const { id, classes, inner, attributes={}, style={}, children=[] } = properties;
+    var elmt = document.createElement(name);
+    if (id) { elmt.id = id; }
+    if (classes) { elmt.className = classes; }
+    if (inner) { elmt.innerText = inner; }
+    Object.keys(attributes).map(k => { elmt.setAttribute(k, attributes[k]) });
+    Object.assign(elmt.style, style);
+    children.map(child => elmt.appendChild(child));
+    return elmt;
+  }
   
   static createInPlaylistToken(inPlaylists) {
     // Create a little visual marker meaning 'already present in a playlist' 
@@ -32,16 +45,44 @@ class ElementBuilder {
   }
   
   static createBtnDetectInPlaylistTracks() {
-    var btnDetectInPlaylistTracks = document.createElement("button");
-    btnDetectInPlaylistTracks.innerText = "Detect Added Tracks";
+    var btnDetectInPlaylistTracks = ElementBuilder.createElement("button", { inner: "Detect Added Tracks" });
     btnDetectInPlaylistTracks.addEventListener('click', () => 
                                                DeezierArea.getInstance().appendInPlaylistTokens());
     return btnDetectInPlaylistTracks;
   }
   
+  static createLibraryList() {
+    var list = ElementBuilder.createElement('div', {
+      id: ID_LIBRARY_ELMT,
+      style: {
+        height: '250px',
+        width: '200px',
+        overflow: 'scroll',
+        border: '1px #aabbcc solid',
+        padding: '10px'
+	    }
+    });
+    return list;
+  }
+  
+  static createLibraryListElmts() {
+    var elmts = [];
+    for (let [pId, playlist] of DeezierArea.getInstance().getLibrary()) {
+      var playlistLinkElmt = ElementBuilder.createElement('a', {
+        inner: `${playlist.title} (${playlist.length})`,
+        attributes: {href: playlist.url}
+      })
+      elmts.push(ElementBuilder.createElement('div', {
+        children: [playlistLinkElmt]
+      }));
+    }
+    return elmts;
+  }
+  
   static createDeezierPanelArea() {
     var area = document.createElement("div");
     area.appendChild(ElementBuilder.createBtnDetectInPlaylistTracks());
+    area.appendChild(ElementBuilder.createLibraryList());
     return area;
   }
 }
@@ -167,6 +208,10 @@ class MusicLibrary {
     return tracks.data.map(t => t.id);
   }
   
+  [Symbol.iterator]() {
+    return Object.entries(this.playlists)[Symbol.iterator]();
+  }
+  
   getAllTracks() {
     var allTracks = [];
     Object.values(this.playlists).map(p => allTracks.push(...p.tracks));
@@ -235,8 +280,17 @@ class DeezierArea {
     }
   }
   
+  refreshLibrary() {
+    var libraryElmt = document.getElementById(ID_LIBRARY_ELMT);
+    ElementBuilder.createLibraryListElmts().map(p => libraryElmt.appendChild(p));
+  }
+  
   getPanelArea() {
     return this.panelArea;
+  }
+  
+  getLibrary() {
+    return this.library;
   }
   
 }
@@ -256,6 +310,7 @@ async function process() {
   console.log("Injecting Deezier area in left side panel..");
   area.injectInPage();
   console.log("End Deezier process ..");
+  area.refreshLibrary();
 }
 
 setTimeout(process, 3000);
