@@ -11,33 +11,45 @@
 
 
 class ElementBuilder {
+  /* Create DOM elements */
   
-  static createAddedToken(inPlaylists) {
+  static createInPlaylistToken(inPlaylists) {
     // Create a little visual marker meaning 'already present in a playlist' 
     var token = document.createElement("div");
     token.className = "datagrid-cell cell-explicit-small";
     token.setAttribute("title", inPlaylists.join('\n'));
     var content = document.createElement("div");
     content.className = "explicit outline small";
-    content.innerHTML = "V";
+    if (inPlaylists.length == 1) {
+      content.innerHTML = "V";
+    } else {
+      content.innerHTML = inPlaylists.length;
+    }
     content.style["border-color"] = 'green';
     content.style["color"] = 'green';
     token.appendChild(content);
     return token;
   }
   
-  static createButtonDetectAddedTracks(deezierArea) {
-    var buttonDetectAddedTracks = document.createElement("button");
-    buttonDetectAddedTracks.innerText = "Detect Added Tracks";
-    buttonDetectAddedTracks.addEventListener('click', deezierArea.appendAddedTokens);
-    buttonDetectAddedTracks.library = deezierArea.library;
-    return buttonDetectAddedTracks;
+  static createBtnDetectInPlaylistTracks() {
+    var btnDetectInPlaylistTracks = document.createElement("button");
+    btnDetectInPlaylistTracks.innerText = "Detect Added Tracks";
+    btnDetectInPlaylistTracks.addEventListener('click', () => 
+                                               DeezierArea.getInstance().appendInPlaylistTokens());
+    return btnDetectInPlaylistTracks;
   }
-    
+  
+  static createDeezierPanelArea() {
+    var area = document.createElement("div");
+    area.appendChild(ElementBuilder.createBtnDetectInPlaylistTracks());
+    return area;
+  }
 }
 
+
 class ElementFinder {
-    
+  /* Find DOM elements */
+  
   static getProfileId() {
     // Discover the user id by looking at current page
     var l = document.getElementsByClassName("sidebar-nav-link is-main");
@@ -45,6 +57,11 @@ class ElementFinder {
       var res = e.href.match(/.*profile\/(\d+)/);
       if (res) { return res[1] }
     }
+  }
+  
+  static getSidebar() {
+    // Deezer original left sidebar, present in all views
+    return document.getElementsByClassName("nano-content")[0];
   }
   
   static getTracksInPage() {
@@ -57,10 +74,40 @@ class ElementFinder {
     var urlToParse = songElement.getElementsByClassName("datagrid-label-main title")[0].getAttribute('href');
     return parseInt(urlToParse.substr(urlToParse.lastIndexOf('/')+1));
   }
+  
+  static getElmtToMonitorScrolling() {
+    var parent = document.getElementsByClassName("datagrid")[0];
+    if (parent.childNodes.length > 1) {
+      return parent.childNodes[1];
+    }
+  }
 
 }
 
+
+class DOM_Monitor {
+  /* Manage observers on DOM elements */
+  
+  constructor() {
+    this.observers = {}
+  }
+  
+  createObserver(name, domElmt, callback) {
+    this.observers[name] = new MutationObserver(callback);
+    this.observers[name].observe(domElmt, {attributes: true});
+  }
+  
+  createScrollingObserver() {
+    this.createObserver('scrolling',
+                        ElementFinder.getElmtToMonitorScrolling(),
+                        () => DeezierArea.getInstance().appendInPlaylistTokens());
+  }
+  
+}
+
+
 class MusicLibrary {
+  /* For an user, maintain an index of his personal playlists and fill the tracks listed in */
   
   constructor(profileId) {
     this.profileId = profileId;
@@ -71,9 +118,9 @@ class MusicLibrary {
     // Fill the inner playlists object with metadata from the user playlists (not the tracks in yet)
     // The tracks field has to be filled afterwards calling fetchTracks()
     return new Promise((resolve, reject) => {
-      this.fetchPlaylists().then((p_list) => {
-        console.log("Fetched", p_list.length, "playlists");
-        p_list.map(p => {
+      this.fetchPlaylists().then((pList) => {
+        console.log("Fetched", pList.length, "playlists");
+        pList.map(p => {
           this.playlists[p.id] = {
             url: p.url,
             title: p.title,
@@ -93,7 +140,7 @@ class MusicLibrary {
     return new Promise((resolve, reject) => {
       playlistIds = playlistIds.length > 0 ? playlistIds : Object.keys(this.playlists);
       for (let p of playlistIds) {
-        this.fetchTracks(p).then((track_ids) => this.playlists[p].tracks = track_ids)      
+        this.fetchTracks(p).then((trackIds) => this.playlists[p].tracks = trackIds)      
       }
       resolve();
     })
@@ -114,8 +161,8 @@ class MusicLibrary {
     }) );
   }
 
-  async fetchTracks(playlist_id) {
-    const response = await fetch(`${this.playlists[playlist_id].url_tracks}&limit=1000`);
+  async fetchTracks(playlistId) {
+    const response = await fetch(`${this.playlists[playlistId].url_tracks}&limit=1000`);
     const tracks = await response.json();
     return tracks.data.map(t => t.id);
   }
@@ -126,10 +173,10 @@ class MusicLibrary {
     return allTracks;
   }
   
-  getPlaylistsContainingTrack(track_id) {
+  getPlaylistsContainingTrack(trackId) {
     var inPlaylists = [];
     Object.values(this.playlists).map(p => {
-      if (p.tracks.includes(track_id)) { inPlaylists.push(p.title) }
+      if (p.tracks.includes(trackId)) { inPlaylists.push(p.title) }
     });
     return inPlaylists;
   }
@@ -144,37 +191,52 @@ class MusicLibrary {
   
 }
 
+
 class DeezierArea {
+  /* The place where all the stuff Deezier is working on is gathered, mapping in DOM as an area in sidebar */
   
   constructor(library) {
+    if(!DeezierArea._instance) {
+      DeezierArea._instance = this;
+    }
     this.library = library;
+    this.domObserver = new DOM_Monitor();
+    this.panelArea = null;
+    return DeezierArea._instance;
+  }
+  
+  static getInstance() {
+    return this._instance;
   }
   
   injectInPage() {
-    // Inject the area in the left side bar of Deezer interface
-    var sidebar = document.getElementsByClassName("nano-content")[0];
-    var area = document.createElement("div");
-    area.appendChild(ElementBuilder.createButtonDetectAddedTracks(this));
-    sidebar.appendChild(area);
+    // Inject the actual DOM area panel in the left side bar of Deezer interface
+    this.panelArea = ElementBuilder.createDeezierPanelArea();
+    ElementFinder.getSidebar().appendChild(this.panelArea);
+    // Setup observers on DOM elements
+    this.domObserver.createScrollingObserver();
   }
   
-  appendAddedTokens() {
+  appendInPlaylistTokens() {
     var tracks = ElementFinder.getTracksInPage();
     console.log("Found", tracks.length, "tracks on this page !");
     // TODO : not very efficient to go through the whole library for each track >:(
     for (let track of tracks) {
-      var track_id = ElementFinder.getTrackIdFromElement(track);
+      var trackId = ElementFinder.getTrackIdFromElement(track);
       if(track.getAttribute('deezier-token')) {
         continue  // Song already marked with a token
       }
       var titleElmt = track.querySelector(".cell-title");
-      // this refers here to the button itself this function was given as callback to
-      var inPlaylists = this.library.getPlaylistsContainingTrack(track_id);
+      var inPlaylists = this.library.getPlaylistsContainingTrack(trackId);
       if (inPlaylists.length) {  // track is in at least one playlist
-        track.insertBefore(ElementBuilder.createAddedToken(inPlaylists), titleElmt);
+        track.insertBefore(ElementBuilder.createInPlaylistToken(inPlaylists), titleElmt);
         track.setAttribute('deezier-token', 1);
       }
     }
+  }
+  
+  getPanelArea() {
+    return this.panelArea;
   }
   
 }
