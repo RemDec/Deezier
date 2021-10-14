@@ -9,6 +9,7 @@
 // ==/UserScript==
 
 const ID_LIBRARY_ELMT = 'deezier-library';
+const ID_SCROLL_MONITOR_ELMT = 'deezier-scrollelmt';
 
 
 class ElementBuilder {
@@ -28,36 +29,35 @@ class ElementBuilder {
   
   static createInPlaylistToken(inPlaylists) {
     // Create a little visual marker meaning 'already present in a playlist' 
-    var token = document.createElement("div");
-    token.className = "datagrid-cell cell-explicit-small";
-    token.setAttribute("title", inPlaylists.join('\n'));
-    var content = document.createElement("div");
-    content.className = "explicit outline small";
-    if (inPlaylists.length == 1) {
-      content.innerHTML = "V";
-    } else {
-      content.innerHTML = inPlaylists.length;
-    }
-    content.style["border-color"] = 'green';
-    content.style["color"] = 'green';
-    token.appendChild(content);
-    return token;
+    var tokenContent = this.createElement('div',{
+      classes: "explicit outline small",
+      inner: inPlaylists.length == 1 ? 'V' : inPlaylists.length,
+      style: {color: 'green', 'border-color': 'green'}
+    })
+    return this.createElement('div', {
+      classes: "datagrid-cell cell-explicit-small",
+      attributes: {title: inPlaylists.join('\n')},
+      children: [tokenContent]
+    });
   }
   
   static createBtnDetectInPlaylistTracks() {
-    var btnDetectInPlaylistTracks = ElementBuilder.createElement("button", { inner: "Detect Added Tracks" });
+    var btnDetectInPlaylistTracks = this.createElement("button", {
+      inner: "Detect Added Tracks",
+      style: { padding: '5px', border: '1px solid', margin: '5px', 'margin-left': '20px'}
+    });
     btnDetectInPlaylistTracks.addEventListener('click', () => 
                                                DeezierArea.getInstance().appendInPlaylistTokens());
     return btnDetectInPlaylistTracks;
   }
   
   static createLibraryList() {
-    var list = ElementBuilder.createElement('div', {
+    var list = this.createElement('div', {
       id: ID_LIBRARY_ELMT,
       style: {
         height: '250px',
         width: '200px',
-        overflow: 'scroll',
+        'overflow-y': 'scroll',
         border: '1px #aabbcc solid',
         padding: '10px'
 	    }
@@ -68,11 +68,11 @@ class ElementBuilder {
   static createLibraryListElmts() {
     var elmts = [];
     for (let [pId, playlist] of DeezierArea.getInstance().getLibrary()) {
-      var playlistLinkElmt = ElementBuilder.createElement('a', {
+      var playlistLinkElmt = this.createElement('a', {
         inner: `${playlist.title} (${playlist.length})`,
         attributes: {href: playlist.url}
       })
-      elmts.push(ElementBuilder.createElement('div', {
+      elmts.push(this.createElement('div', {
         children: [playlistLinkElmt]
       }));
     }
@@ -112,13 +112,22 @@ class ElementFinder {
   }
 
   static getTrackIdFromElement(songElement) {
-    var urlToParse = songElement.getElementsByClassName("datagrid-label-main title")[0].getAttribute('href');
+    var titleElmts = songElement.getElementsByClassName("datagrid-label-main title");
+    if (!titleElmts.length) {
+      return null
+    }
+    var urlToParse = titleElmts[0].getAttribute('href');
     return parseInt(urlToParse.substr(urlToParse.lastIndexOf('/')+1));
   }
   
   static getElmtToMonitorScrolling() {
-    var parent = document.getElementsByClassName("datagrid")[0];
+    var datagridElmt = document.getElementsByClassName("datagrid");
+    if (!datagridElmt.length) {
+      return null;
+    }
+    var parent = datagridElmt[0];
     if (parent.childNodes.length > 1) {
+      parent.childNodes[1].id = ID_SCROLL_MONITOR_ELMT;
       return parent.childNodes[1];
     }
   }
@@ -128,6 +137,8 @@ class ElementFinder {
 
 class DOM_Monitor {
   /* Manage observers on DOM elements */
+  
+  static SCROLLING_OBS = 'scrolling';
   
   constructor() {
     this.observers = {}
@@ -139,9 +150,11 @@ class DOM_Monitor {
   }
   
   createScrollingObserver() {
-    this.createObserver('scrolling',
-                        ElementFinder.getElmtToMonitorScrolling(),
-                        () => DeezierArea.getInstance().appendInPlaylistTokens());
+    if (this.observers[this.SCROLLING_OBS] !== undefined) { return true }
+    var elmtToMonitor = ElementFinder.getElmtToMonitorScrolling();
+    if (elmtToMonitor == null) { return false }
+    this.createObserver(this.SCROLLING_OBS, elmtToMonitor, () => DeezierArea.getInstance().appendInPlaylistTokens());
+    return true;
   }
   
 }
@@ -259,6 +272,7 @@ class DeezierArea {
     this.panelArea = ElementBuilder.createDeezierPanelArea();
     ElementFinder.getSidebar().appendChild(this.panelArea);
     // Setup observers on DOM elements
+    //TODO won't work if we're not on a playlist view : monitor elmt id page_loader to add at time it gets 'opened'  attr
     this.domObserver.createScrollingObserver();
   }
   
@@ -268,8 +282,8 @@ class DeezierArea {
     // TODO : not very efficient to go through the whole library for each track >:(
     for (let track of tracks) {
       var trackId = ElementFinder.getTrackIdFromElement(track);
-      if(track.getAttribute('deezier-token')) {
-        continue  // Song already marked with a token
+      if(track && track.getAttribute('deezier-token')) {
+        continue  // Song unavailable or already marked with a token
       }
       var titleElmt = track.querySelector(".cell-title");
       var inPlaylists = this.library.getPlaylistsContainingTrack(trackId);
