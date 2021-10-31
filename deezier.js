@@ -68,7 +68,13 @@ class ElementBuilder {
     );
 
     searchField.addEventListener("keyup", e => {
-      const s = e.target.value;
+      const tomatch = e.target.value;
+      if (tomatch.length < 3) {
+        return; // TODO If comes back to 0 reset view to get rid of research
+      }
+      const matches = DeezierArea.getInstance().searchInLibrary(tomatch);
+      console.log(matches);
+      DeezierArea.getInstance().setLibraryViewSearchResults(matches);
     });
     return searchBar;
   }
@@ -81,6 +87,7 @@ class ElementBuilder {
         height: '250px',
         width: '200px',
         'overflow-y': 'scroll',
+        'overflow-x': 'scroll',
         border: '1px #aabbcc solid',
         padding: '10px'
 	    }
@@ -95,11 +102,43 @@ class ElementBuilder {
       var playlistLinkElmt = this.createElement('a', {
         inner: `${playlist.title} (${playlist.length})`,
         attributes: {href: playlist.url}
-      })
+      });
       elmts.push(this.createElement('div', {
         children: [playlistLinkElmt]
       }));
     }
+    return elmts;
+  }
+
+  static createLibrarySearchResultsElmts(searchResults) {
+    var elmts = [];
+    var lib = DeezierArea.getInstance().getLibrary();
+    Object.entries(searchResults).map(([pId, results]) => {
+      var playlist = lib.getPlaylist(pId);
+      var children = [];
+      var playlistLinkElmt = this.createElement('a', {
+        inner: `${playlist.title} (${results.title.length})`,
+        attributes: {href: playlist.url}
+      });
+      children.push(playlistLinkElmt);
+      results.title.map(track => {
+        children.push(this.createElement('br'));
+        children.push(this.createElement('a', {
+          inner: `  | ${track.title} - ${track.artist_name}`,
+          attributes: {href: track.url}
+        }));
+      });
+      results.artist.map(track => {
+        children.push(this.createElement('br'));
+        children.push(this.createElement('a', {
+          inner: `  |> ${track.title} - ${track.artist_name}`,
+          attributes: {href: track.url}
+        }));
+      });
+      elmts.push(this.createElement('div', {
+        children: children
+      }));
+    });
     return elmts;
   }
 
@@ -132,8 +171,7 @@ class ElementFinder {
   }
 
   static getTracksInPage() {
-    // Build an array of tracks present in current page
-    // TODO : deezer inject tracks incrementally when scrolling down, should simulate it before retrieving tracks
+    // Build an array of tracks present in current page (beware Deezer adjust it dynamically when scrolling)
     return document.getElementsByClassName("datagrid-row song");
   }
 
@@ -246,12 +284,12 @@ class MusicLibrary {
       url: t.link,
       artist_id: t.artist.id,
       artist_name: t.artist.name,
+      artist_url: t.artist.link,
       album_id: t.album.id,
-      album_name: t.album.title
+      album_name: t.album.title,
+      album_url: t.album.tracklist
     }));
   }
-
-
 
   [Symbol.iterator]() {
     return Object.entries(this.playlists)[Symbol.iterator]();
@@ -278,6 +316,28 @@ class MusicLibrary {
     return inPlaylists;
   }
 
+  searchMathingTracks(tomatch) {
+    const re = RegExp(tomatch, 'i');
+    const matchedPlaylists = {};
+    Object.entries(this.playlists).map(([pId, playlist]) => {
+      var matches = { title: [], artist: [] };
+      Object.values(playlist.tracks).map(track => {
+        var matchCategory = null;
+        if (re.test(track.title) && !matches.title.filter(m => m.id === track.track_id).length) {
+          matchCategory = matches.title;
+        }
+        if (re.test(track.artist_name) && !matches.artist.filter(m => m.id === track.track_id).length) {
+          matchCategory = matches.artist;
+        }
+        matchCategory !== null && matchCategory.push(Object.assign({}, track));
+      });
+      if (matches.title.length || matches.artist.length) {
+        matchedPlaylists[pId] = matches;
+      }
+    });
+    return matchedPlaylists;
+  }
+
   display() {
     console.log("Music library for user", this.profileId, this.playlists);
   }
@@ -297,6 +357,7 @@ class DeezierArea {
       DeezierArea._instance = this;
     }
     this.library = library;
+    this.libraryViewElmt = null;
     this.domObserver = new DOM_Monitor();
     this.panelArea = null;
     return DeezierArea._instance;
@@ -310,8 +371,9 @@ class DeezierArea {
     // Inject the actual DOM area panel in the left side bar of Deezer interface
     this.panelArea = ElementBuilder.createDeezierPanelArea();
     ElementFinder.getSidebar().appendChild(this.panelArea);
+    this.libraryViewElmt = document.getElementById(ID_LIBRARY_ELMT);
+    this.setLibraryViewPlaylists();
     // Setup observers on DOM elements
-    //TODO won't work if we're not on a playlist view : monitor elmt id page_loader to add at time it gets 'opened'  attr
     this.domObserver.createScrollingObserver();
   }
 
@@ -332,11 +394,26 @@ class DeezierArea {
         track.setAttribute('deezier-token', 1);
       }
     }
+    console.log(this.library.searchMathingTracks("tim"));
   }
 
-  refreshLibrary() {
-    var libraryElmt = document.getElementById(ID_LIBRARY_ELMT);
-    ElementBuilder.createLibraryListElmts().map(p => libraryElmt.appendChild(p));
+  searchInLibrary(tomatch) {
+    // TODO some cache system when typing a new following letter, only look in previous result because we narrow down
+    return this.library.searchMathingTracks(tomatch)
+  }
+
+  cleanLibraryView() {
+    while (this.libraryViewElmt.firstChild) { this.libraryViewElmt.firstChild.remove() }
+  }
+
+  setLibraryViewPlaylists() {
+    this.cleanLibraryView();
+    ElementBuilder.createLibraryListElmts().map(p => this.libraryViewElmt.appendChild(p));
+  }
+
+  setLibraryViewSearchResults(searchResults) {
+    this.cleanLibraryView();
+    ElementBuilder.createLibrarySearchResultsElmts(searchResults).map(p => this.libraryViewElmt.appendChild(p));
   }
 
   getPanelArea() {
@@ -364,8 +441,8 @@ async function process() {
   console.log("Injecting Deezier area in left side panel..");
   area.injectInPage();
   console.log("End Deezier process ..");
-  area.refreshLibrary();
 }
 
 setTimeout(process, 2000);
+
 
