@@ -16,11 +16,12 @@ class ElementBuilder {
   /* Create DOM elements */
 
   static createElement(name, properties={}) {
-    const { id, classes, inner, attributes={}, style={}, children=[] } = properties;
+    const { id, classes, inner, innerHtml, attributes={}, style={}, children=[] } = properties;
     var elmt = document.createElement(name);
     if (id) { elmt.id = id; }
     if (classes) { elmt.className = classes; }
     if (inner) { elmt.innerText = inner; }
+    if (innerHtml) { elmt.innerHTML = innerHtml; }
     Object.keys(attributes).map(k => { elmt.setAttribute(k, attributes[k]) });
     Object.assign(elmt.style, style);
     children.map(child => elmt.appendChild(child));
@@ -70,10 +71,12 @@ class ElementBuilder {
     searchField.addEventListener("keyup", e => {
       const tomatch = e.target.value;
       if (tomatch.length < 3) {
+        if (tomatch.length == 0) {
+          DeezierArea.getInstance().setLibraryViewPlaylists();
+        }
         return; // TODO If comes back to 0 reset view to get rid of research
       }
       const matches = DeezierArea.getInstance().searchInLibrary(tomatch);
-      console.log(matches);
       DeezierArea.getInstance().setLibraryViewSearchResults(matches);
     });
     return searchBar;
@@ -87,7 +90,6 @@ class ElementBuilder {
         height: '250px',
         width: '200px',
         'overflow-y': 'scroll',
-        'overflow-x': 'scroll',
         border: '1px #aabbcc solid',
         padding: '10px'
 	    }
@@ -116,23 +118,29 @@ class ElementBuilder {
     Object.entries(searchResults).map(([pId, results]) => {
       var playlist = lib.getPlaylist(pId);
       var children = [];
-      var playlistLinkElmt = this.createElement('a', {
-        inner: `${playlist.title} (${results.title.length})`,
+      // Name of playlist we fond results in
+      children.push(this.createElement('a', {
+        innerHtml:`<b>[   ${playlist.title} (${results.title.length + results.artist.length})   ]</b>`,
         attributes: {href: playlist.url}
-      });
-      children.push(playlistLinkElmt);
-      results.title.map(track => {
+      }));
+      // Elements in first serie under playlist name are matches on the song title
+      results.title.map((track, i, {length}) => {
         children.push(this.createElement('br'));
+        var branchStyle = i == length-1 ? (results.artist.length ? '┡' : '┗') : '┣';
         children.push(this.createElement('a', {
-          inner: `  | ${track.title} - ${track.artist_name}`,
-          attributes: {href: track.url}
+          innerHtml: `  ${branchStyle} <i><b>${track.title}</b></i> - ${track.artist_name}`,
+          attributes: {href: track.url},
+          style: {'white-space': 'nowrap'}
         }));
       });
-      results.artist.map(track => {
+      // Elements in second serie under playlist name are matches on the artist name
+      results.artist.map((track, i, {length}) => {
         children.push(this.createElement('br'));
+        var branchStyle = i == length-1 ? '┗' : '┣';
         children.push(this.createElement('a', {
-          inner: `  |> ${track.title} - ${track.artist_name}`,
-          attributes: {href: track.url}
+          innerHtml: `  ${branchStyle} <i><b>${track.title}</b></i> - ${track.artist_name}`,
+          attributes: {href: track.url},
+          style: {'white-space': 'nowrap'}
         }));
       });
       elmts.push(this.createElement('div', {
@@ -408,11 +416,13 @@ class DeezierArea {
 
   setLibraryViewPlaylists() {
     this.cleanLibraryView();
+    this.libraryViewElmt.style.removeProperty('overflow-x');
     ElementBuilder.createLibraryListElmts().map(p => this.libraryViewElmt.appendChild(p));
   }
 
   setLibraryViewSearchResults(searchResults) {
     this.cleanLibraryView();
+    this.libraryViewElmt.style['overflow-x'] = 'scroll';
     ElementBuilder.createLibrarySearchResultsElmts(searchResults).map(p => this.libraryViewElmt.appendChild(p));
   }
 
