@@ -250,6 +250,7 @@ class MusicLibrary {
         url: p.url,
         title: p.title,
         length: p.length,
+        creator: p.creator,
         tracks: {},  // <- will be filled once tracks fetched as well
         url_tracks: p.url_tracks,
         url_picture: p.url_picture,
@@ -273,14 +274,15 @@ class MusicLibrary {
     const response = await fetch(`https://api.deezer.com/user/${this.profileId}/playlists&limit=1000`);
     const playlists = await response.json();
     return playlists.data.map(p => ({
+      id: p.id,
       url: p.link,
       title: p.title,
-      id: p.id,
       length: p.nb_tracks,
+      creator: p.creator.id,
       url_tracks: p.tracklist,
       url_picture: p.picture,
       time_lastmodif: p.time_mod
-    }) );
+    }));
   }
 
   async fetchTracks(playlistId) {
@@ -316,10 +318,17 @@ class MusicLibrary {
     return allTracks;
   }
 
-  getPlaylistsContainingTrack(trackId) {
+  getPlaylistsContainingTrack(trackId, lovedTracksPlaylist=false, otherUserPlaylists=false) {
     var inPlaylists = [];
     Object.entries(this.playlists).map(([pId, playlist]) => {
-      if (this.getTracksInPlaylist(pId).includes(String(trackId))) { inPlaylists.push(playlist.title) }
+      const isOwnUserPlaylist = (playlist.creator == ElementFinder.getProfileId());
+      if (otherUserPlaylists || isOwnUserPlaylist) {
+        if (lovedTracksPlaylist || playlist.title != "Loved Tracks" || !isOwnUserPlaylist) {
+          if (this.getTracksInPlaylist(pId).includes(String(trackId))) {
+            inPlaylists.push(playlist.title);
+          }
+        }
+      }
     });
     return inPlaylists;
   }
@@ -402,7 +411,6 @@ class DeezierArea {
         track.setAttribute('deezier-token', 1);
       }
     }
-    console.log(this.library.searchMathingTracks("tim"));
   }
 
   searchInLibrary(tomatch) {
@@ -454,5 +462,4 @@ async function process() {
 }
 
 setTimeout(process, 2000);
-
 
