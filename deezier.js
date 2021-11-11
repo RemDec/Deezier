@@ -11,6 +11,13 @@
 const ID_LIBRARY_ELMT = 'deezier-library';
 const ID_SCROLL_MONITOR_ELMT = 'deezier-scrollelmt';
 
+class Util {
+
+  static stringsSimilar(baseStr, againstStr) {
+    return (baseStr === againstStr); //TODO
+  }
+
+}
 
 class ElementBuilder {
   /* Create DOM elements */
@@ -34,7 +41,7 @@ class ElementBuilder {
       classes: "explicit outline small",
       inner: inPlaylists.length == 1 ? 'V' : inPlaylists.length,
       style: {color: 'green', 'border-color': 'green'}
-    })
+    });
     return this.createElement('div', {
       classes: "datagrid-cell cell-explicit-small",
       attributes: {title: inPlaylists.join('\n')},
@@ -164,6 +171,12 @@ class ElementBuilder {
 class ElementFinder {
   /* Find DOM elements */
 
+  static OBFUSCATED = {
+    track: 'JoTQr',
+    album: '_10fIC',
+    track_title: '_2tIhH'
+  };
+
   static getProfileId() {
     // Discover the user id by looking at current page
     var l = document.getElementsByClassName("sidebar-nav-link is-main");
@@ -180,16 +193,31 @@ class ElementFinder {
 
   static getTracksInPage() {
     // Build an array of tracks present in current page (beware Deezer adjust it dynamically when scrolling)
-    return document.getElementsByClassName("datagrid-row song");
+    var tracks = document.getElementsByClassName("datagrid-row song");
+    if (!tracks.length) {
+      tracks = document.getElementsByClassName(this.OBFUSCATED.track);
+    }
+    return tracks;
   }
 
-  static getTrackIdFromElement(songElement) {
-    var titleElmts = songElement.getElementsByClassName("datagrid-label-main title");
+  static getTrackIdFromElement(trackElement) {
+    var titleElmts = trackElement.getElementsByClassName("datagrid-label-main title");
     if (!titleElmts.length) {
-      return null
+      return null;
     }
     var urlToParse = titleElmts[0].getAttribute('href');
     return parseInt(urlToParse.substr(urlToParse.lastIndexOf('/')+1));
+  }
+
+  static getTrackInfosFromElement(trackElement) {
+    const titleElmt = trackElement.getElementsByClassName(this.OBFUSCATED.track_title)[0];
+    const albumElmt = trackElement.getElementsByClassName(this.OBFUSCATED.album)[0];
+    const artistElmt = albumElmt.previousSibling;
+    return {
+      title: titleElmt.innerText, title_elmt: titleElmt,
+      album_name: albumElmt.innerText, album_id: albumElmt.firstElementChild.firstElementChild.getAttribute('href').split('/').pop(),
+      artist: artistElmt.innerText, artist_id: artistElmt.firstElementChild.firstElementChild.getAttribute('href').split('/').pop()
+    };
   }
 
   static getElmtToMonitorScrolling() {
@@ -238,6 +266,7 @@ class MusicLibrary {
   constructor(profileId) {
     this.profileId = profileId;
     this.playlists = {};
+    this.artists = {};
   }
 
   async computePlaylists() {
@@ -265,7 +294,16 @@ class MusicLibrary {
     playlistIds = playlistIds.length > 0 ? playlistIds : Object.keys(this.playlists);
     for (let p of playlistIds) {
       var trackList = await this.fetchTracks(p);
-      trackList.forEach(track => this.playlists[p]['tracks'][track.track_id] = track)
+      trackList.forEach(t => {
+        this.playlists[p]['tracks'][t.track_id] = t;
+        const artist = this.addArtist(t.artist_id, t.artist_name);
+        const album = this.addAlbumToArtist(t.artist_id, t.album_id, t.album_name);
+        const track = this.addTrackToArtistAlbum(t.artist_id, t.album_id, t.track_id, t.title, p);
+
+        if (!track['inPlaylists'].includes(p)) {
+          track['inPlaylists'].push(p);
+        }
+      });
     }
   }
 
@@ -305,6 +343,44 @@ class MusicLibrary {
     return Object.entries(this.playlists)[Symbol.iterator]();
   }
 
+  addArtist(artistId, artistName) {
+    const currArtist = this.artists[artistId];
+    if (currArtist) { return currArtist }
+    const newArtist = {
+      artist_name: artistName,
+      albums: { }
+    };
+    this.artists[artistId] = newArtist;
+    return newArtist;
+  }
+
+  addAlbumToArtist(artistId, albumId, albumName) {
+    const currAlbum = this.artists[artistId]['albums'][albumId];
+    if (currAlbum) { return currAlbum }
+    const newAlbum = {
+      album_name: albumName,
+      album_tracks: { }
+    };
+    this.artists[artistId]['albums'][albumId] = newAlbum;
+    return newAlbum;
+  }
+
+  addTrackToArtistAlbum(artistId, albumId, trackId, trackName, inPlaylist) {
+    const currTrack = this.artists[artistId]['albums'][albumId]['album_tracks'][trackId];
+    if (currTrack) { return currTrack }
+    const newTrack = {
+      title: trackName,
+      inPlaylists: [inPlaylist]
+    };
+    this.artists[artistId]['albums'][albumId]['album_tracks'][trackId] = newTrack;
+    return newTrack;
+  }
+
+
+  getPlaylist(id) {
+    return this.playlists[id];
+  }
+
   getTracksInPlaylist(playlistId, onlyTrackIds=true) {
     if (this.playlists[playlistId] !== undefined) {
       return Object.entries(this.playlists[playlistId].tracks).map(([tId, track]) => onlyTrackIds ? tId : track);
@@ -334,6 +410,8 @@ class MusicLibrary {
   }
 
   searchMathingTracks(tomatch) {
+    // From the playlists, retrieve all tracks matching a pattern (used in track research). Returns an object
+    // indexed by playlist id in which a match is found, either on the track title or the artist (separated in 2 arrays)
     const re = RegExp(tomatch, 'i');
     const matchedPlaylists = {};
     Object.entries(this.playlists).map(([pId, playlist]) => {
@@ -355,12 +433,49 @@ class MusicLibrary {
     return matchedPlaylists;
   }
 
-  display() {
-    console.log("Music library for user", this.profileId, this.playlists);
+  getArtist(id) {
+    return this.artists[id] || null;
   }
 
-  getPlaylist(id) {
-    return this.playlists[id];
+  getAlbumsFromArtist(artistId) {
+    const artist = this.getArtist(artistId);
+    if (!artist) { return null }
+    return artist['albums'];
+  }
+
+  getAlbumTracksFromArtist(artistId, albumId) {
+    // From the known artists, return the album object if it exists or null
+    const artist = this.getArtist(artistId);
+    if (!artist) { return null }
+    return artist['albums'][albumId] || null;
+  }
+
+  getPlaylistsMatchingTrackFromArtist(artistId, trackTitle, albumId=null, onlySimilarTracks=false) {
+    // Sometimes we don't have the track id itself (only title), so we use known artist stuff to determine if
+    // the track is present in the library. Returns an array of playlist names the track is in.
+    const inPlaylists = [];
+    if (albumId) {
+      const albumTracks = this.getAlbumTracksFromArtist(artistId, albumId);
+      Object.entries(albumTracks).map(([id, albumTrack]) => {
+        if (onlySimilarTracks) {
+          if (Util.stringsSimilar(trackTitle, albumTrack.title)) {
+            inPlaylists.push(Object.assign(albumTrack, { id: id }));
+          }
+        } else if (albumTrack.title === trackTitle) {
+          inPlaylists.push(... albumTrack.inPlaylists);
+        }
+      });
+      return [... new Set(inPlaylists)];
+    } else {
+      return Object.keys(this.getAlbumsFromArtist(artistId)).foreach(albumId => {
+        inPlaylists.push(... this.getMatchingTrackFromArtist(artistId, trackTitle, albumId, onlySimilarTracks));
+      });
+    }
+    return inPlaylists;
+  }
+
+  display() {
+    console.log("Music library for user", this.profileId, '\nPlaylists:', this.playlists, '\nArtists', this.artists);
   }
 
 }
@@ -400,12 +515,21 @@ class DeezierArea {
     console.log("Found", tracks.length, "tracks on this page !");
     // TODO : not very efficient to go through the whole library for each track >:(
     for (let track of tracks) {
-      var trackId = ElementFinder.getTrackIdFromElement(track);
       if(track && track.getAttribute('deezier-token')) {
-        continue  // Song unavailable or already marked with a token
+          continue  // Song unavailable or already marked with a token
       }
-      var titleElmt = track.querySelector(".cell-title");
-      var inPlaylists = this.library.getPlaylistsContainingTrack(trackId);
+      var titleElmt, inPlaylistsName;
+      var trackId = ElementFinder.getTrackIdFromElement(track);
+      if (trackId) {
+        titleElmt = track.querySelector(".cell-title");
+        inPlaylistsName = this.library.getPlaylistsContainingTrack(trackId);
+      } else {  // Likely we are in the case classnames are obfuscated
+        const trackInfos = ElementFinder.getTrackInfosFromElement(track);
+        console.log(trackInfos);
+        titleElmt = trackInfos.title_elmt;
+        const inPlaylistsId = this.library.getPlaylistsMatchingTrackFromArtist(trackInfos.artist_id, trackInfos.title, trackInfos.album_id);
+        inPlaylistsName = inPlaylistsId.map(pId => this.library.getPlaylist(pId).title);
+      }
       if (inPlaylists.length) {  // track is in at least one playlist
         track.insertBefore(ElementBuilder.createInPlaylistToken(inPlaylists), titleElmt);
         track.setAttribute('deezier-token', 1);
@@ -454,7 +578,7 @@ async function process() {
   var area = new DeezierArea(lib);
   await lib.computePlaylists();
   console.log("Retrieving tracks from all playlists in library..");
-  lib.computeTracks(); // No await here to avoid blocking too much time
+  lib.computeTracks(playlistIds=[]); // No await here to avoid blocking too much time
   lib.display();
   console.log("Injecting Deezier area in left side panel..");
   area.injectInPage();
@@ -462,4 +586,5 @@ async function process() {
 }
 
 setTimeout(process, 2000);
+
 
