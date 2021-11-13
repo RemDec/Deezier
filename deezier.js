@@ -172,9 +172,10 @@ class ElementFinder {
   /* Find DOM elements */
 
   static OBFUSCATED = {
-    track: 'JoTQr',
+    track: 'ZLI1L',
     album: '_10fIC',
-    track_title: '_2tIhH'
+    track_title: '_2tIhH',
+    track_title_only: 'BT3T6'  // Avoid the 'explicit' E token or 'InPlaylist' token
   };
 
   static getProfileId() {
@@ -214,7 +215,7 @@ class ElementFinder {
     const albumElmt = trackElement.getElementsByClassName(this.OBFUSCATED.album)[0];
     const artistElmt = albumElmt.previousSibling;
     return {
-      title: titleElmt.innerText, title_elmt: titleElmt,
+      title: titleElmt.getElementsByClassName(this.OBFUSCATED.track_title_only)[0].innerText, title_elmt: titleElmt,
       album_name: albumElmt.innerText, album_id: albumElmt.firstElementChild.firstElementChild.getAttribute('href').split('/').pop(),
       artist: artistElmt.innerText, artist_id: artistElmt.firstElementChild.firstElementChild.getAttribute('href').split('/').pop()
     };
@@ -447,7 +448,8 @@ class MusicLibrary {
     // From the known artists, return the album object if it exists or null
     const artist = this.getArtist(artistId);
     if (!artist) { return null }
-    return artist['albums'][albumId] || null;
+    if (!artist['albums'][albumId]) { return null }
+    return artist['albums'][albumId]['album_tracks'] || null;
   }
 
   getPlaylistsMatchingTrackFromArtist(artistId, trackTitle, albumId=null, onlySimilarTracks=false) {
@@ -455,7 +457,11 @@ class MusicLibrary {
     // the track is present in the library. Returns an array of playlist names the track is in.
     const inPlaylists = [];
     if (albumId) {
-      const albumTracks = this.getAlbumTracksFromArtist(artistId, albumId);
+      var albumTracks = this.getAlbumTracksFromArtist(artistId, albumId);
+      if (albumTracks === null) {
+        console.error("While looking for track matching", trackTitle, ", didn't find any tracks in album", albumId, "of", artistId, this.getArtist(artistId));
+        albumTracks = {};
+      }
       Object.entries(albumTracks).map(([id, albumTrack]) => {
         if (onlySimilarTracks) {
           if (Util.stringsSimilar(trackTitle, albumTrack.title)) {
@@ -466,7 +472,7 @@ class MusicLibrary {
         }
       });
       return [... new Set(inPlaylists)];
-    } else {
+    } else {  // Will walk through all known albums of the given artist
       return Object.keys(this.getAlbumsFromArtist(artistId)).foreach(albumId => {
         inPlaylists.push(... this.getMatchingTrackFromArtist(artistId, trackTitle, albumId, onlySimilarTracks));
       });
@@ -524,14 +530,13 @@ class DeezierArea {
         titleElmt = track.querySelector(".cell-title");
         inPlaylistsName = this.library.getPlaylistsContainingTrack(trackId);
       } else {  // Likely we are in the case classnames are obfuscated
-        const trackInfos = ElementFinder.getTrackInfosFromElement(track);
-        console.log(trackInfos);
+        const trackInfos = ElementFinder.getTrackInfosFromElement(track);  // Cannot get directly track id, but we have artist/album id + name of the track
         titleElmt = trackInfos.title_elmt;
         const inPlaylistsId = this.library.getPlaylistsMatchingTrackFromArtist(trackInfos.artist_id, trackInfos.title, trackInfos.album_id);
         inPlaylistsName = inPlaylistsId.map(pId => this.library.getPlaylist(pId).title);
       }
-      if (inPlaylists.length) {  // track is in at least one playlist
-        track.insertBefore(ElementBuilder.createInPlaylistToken(inPlaylists), titleElmt);
+      if (inPlaylistsName.length) {  // track is in at least one playlist
+        titleElmt.parentElement.insertBefore(ElementBuilder.createInPlaylistToken(inPlaylistsName), titleElmt);
         track.setAttribute('deezier-token', 1);
       }
     }
@@ -574,7 +579,12 @@ console.log("DEEZIER");
 
 async function process() {
   console.log("Start Deezier process ..");
-  var lib = new MusicLibrary(ElementFinder.getProfileId());
+  const userId = ElementFinder.getProfileId();
+  if (!userId) {
+    delayStart(1000);
+    return;
+  }
+  var lib = new MusicLibrary(userId);
   var area = new DeezierArea(lib);
   await lib.computePlaylists();
   console.log("Retrieving tracks from all playlists in library..");
@@ -585,6 +595,9 @@ async function process() {
   console.log("End Deezier process ..");
 }
 
-setTimeout(process, 2000);
+function delayStart(delay=2000) {
+  setTimeout(process, delay);
+}
 
+delayStart();
 
