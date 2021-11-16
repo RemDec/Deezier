@@ -1,4 +1,5 @@
 // ==UserScript==
+// ==UserScript==
 // @name        Deezier
 // @namespace   Violentmonkey Scripts
 // @match       https://www.deezer.*/*
@@ -172,6 +173,8 @@ class ElementFinder {
   /* Find DOM elements */
 
   static OBFUSCATED = {
+    container_tracks: 'YrLz6',
+    track_toplvl: 'JoTQr',
     track: 'ZLI1L',
     album: '_10fIC',
     track_title: '_2tIhH',
@@ -222,15 +225,21 @@ class ElementFinder {
   }
 
   static getElmtToMonitorScrolling() {
-    var datagridElmt = document.getElementsByClassName("datagrid");
-    if (!datagridElmt.length) {
-      return null;
+    var elmtToMonitor, isObfuscated;
+    const datagridElmt = document.getElementsByClassName("datagrid");
+    if (datagridElmt.length) {
+      const parent = datagridElmt[0];
+      if (parent.childNodes.length <= 1) { return null }
+      elmtToMonitor = parent.childNodes[1];
+      isObfuscated = false;
+    } else {  // Likely we are in obfuscated case
+      const trackContainer = document.getElementsByClassName(this.OBFUSCATED.container_tracks);
+      if (!trackContainer.length) { return null }
+      elmtToMonitor = trackContainer[0];
+      isObfuscated = true;
     }
-    var parent = datagridElmt[0];
-    if (parent.childNodes.length > 1) {
-      parent.childNodes[1].id = ID_SCROLL_MONITOR_ELMT;
-      return parent.childNodes[1];
-    }
+    elmtToMonitor.id = ID_SCROLL_MONITOR_ELMT;
+    return [elmtToMonitor, isObfuscated];
   }
 
 }
@@ -245,16 +254,32 @@ class DOM_Monitor {
     this.observers = {}
   }
 
-  createObserver(name, domElmt, callback) {
+  createObserver(name, domElmt, callback, options={}) {
+    options = Object.assign( { attributes: true, childList: false }, options);
     this.observers[name] = new MutationObserver(callback);
-    this.observers[name].observe(domElmt, {attributes: true});
+    this.observers[name].observe(domElmt, options);
   }
 
+
   createScrollingObserver() {
-    if (this.observers[this.SCROLLING_OBS] !== undefined) { return true }
-    var elmtToMonitor = ElementFinder.getElmtToMonitorScrolling();
+    var [elmtToMonitor, isObfuscated] = ElementFinder.getElmtToMonitorScrolling();
     if (elmtToMonitor == null) { return false }
-    this.createObserver(this.SCROLLING_OBS, elmtToMonitor, () => DeezierArea.getInstance().appendInPlaylistTokens());
+    function cbScrolling(mutationsList) {
+      var newTrackAdded = false;
+      for(var mutation of mutationsList) {
+        if (mutation.type == 'childList') {
+          for (var n of mutation.addedNodes) {
+            if (n.className === ElementFinder.OBFUSCATED.track_toplvl) {
+              newTrackAdded = true;
+              break;
+            }
+          }
+        }
+      }
+      if (newTrackAdded) { DeezierArea.getInstance().appendInPlaylistTokens(); }
+    };
+    var options = isObfuscated ? { childList: true, subtree: true, attributes: false } : { };
+    this.createObserver(this.SCROLLING_OBS, elmtToMonitor, cbScrolling, options);
     return true;
   }
 
@@ -399,7 +424,7 @@ class MusicLibrary {
     var inPlaylists = [];
     Object.entries(this.playlists).map(([pId, playlist]) => {
       const isOwnUserPlaylist = (playlist.creator == ElementFinder.getProfileId());
-      if (otherUserPlaylists || isOwnUserPlaylist) {
+      if (otherUserPlaylists || isOwnUserPlaylist) {  // Consider only user's playlist if not specified
         if (lovedTracksPlaylist || playlist.title != "Loved Tracks" || !isOwnUserPlaylist) {
           if (this.getTracksInPlaylist(pId).includes(String(trackId))) {
             inPlaylists.push(playlist.title);
@@ -459,7 +484,7 @@ class MusicLibrary {
     if (albumId) {
       var albumTracks = this.getAlbumTracksFromArtist(artistId, albumId);
       if (albumTracks === null) {
-        console.error("While looking for track matching", trackTitle, ", didn't find any tracks in album", albumId, "of", artistId, this.getArtist(artistId));
+        console.error("While looking for track matching", trackTitle, ", didn't find any tracks in album", albumId, "of artist", artistId, this.getArtist(artistId));
         albumTracks = {};
       }
       Object.entries(albumTracks).map(([id, albumTrack]) => {
@@ -518,7 +543,7 @@ class DeezierArea {
   appendInPlaylistTokens() {
     // Add a 'V' token in the frontend beside every song already present in a user's playlist
     var tracks = ElementFinder.getTracksInPage();
-    console.log("Found", tracks.length, "tracks on this page !");
+    console.log("Found", tracks.length, "tracks on this page !", tracks);
     // TODO : not very efficient to go through the whole library for each track >:(
     for (let track of tracks) {
       if(track && track.getAttribute('deezier-token')) {
@@ -600,4 +625,5 @@ function delayStart(delay=2000) {
 }
 
 delayStart();
+
 
