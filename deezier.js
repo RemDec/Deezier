@@ -178,7 +178,7 @@ class ElementFinder {
     track: 'ZLI1L',
     album: '_10fIC',
     track_title: '_2tIhH',
-    track_title_only: 'BT3T6'  // Avoid the 'explicit' E token or 'InPlaylist' token
+    track_title_only: '.BT3T6,._2QglM,._3cxEI'  // track_title can contain explicit 'E' token or InPlaylist 'V' token + special case track unavailable
   };
 
   static getProfileId() {
@@ -218,7 +218,7 @@ class ElementFinder {
     const albumElmt = trackElement.getElementsByClassName(this.OBFUSCATED.album)[0];
     const artistElmt = albumElmt.previousSibling;
     return {
-      title: titleElmt.getElementsByClassName(this.OBFUSCATED.track_title_only)[0].innerText, title_elmt: titleElmt,
+      title: titleElmt.querySelector(this.OBFUSCATED.track_title_only).innerText, title_elmt: titleElmt,
       album_name: albumElmt.innerText, album_id: albumElmt.firstElementChild.firstElementChild.getAttribute('href').split('/').pop(),
       artist: artistElmt.innerText, artist_id: artistElmt.firstElementChild.firstElementChild.getAttribute('href').split('/').pop()
     };
@@ -407,7 +407,7 @@ class MusicLibrary {
 
 
   getPlaylist(id) {
-    return this.playlists[id];
+    return this.playlists[id] || null;
   }
 
   getTracksInPlaylist(playlistId, onlyTrackIds=true) {
@@ -423,15 +423,24 @@ class MusicLibrary {
     return allTracks;
   }
 
+  isPlaylistValid(pId, lovedTracksPlaylist=false, otherUserPlaylists=false) {
+    const playlist = this.getPlaylist(pId);
+    if (playlist === null) { return false }
+    const isOwnUserPlaylist = (playlist.creator == ElementFinder.getProfileId());
+    if (otherUserPlaylists || isOwnUserPlaylist) {  // Consider only user's playlist if not specified
+      if (lovedTracksPlaylist || playlist.title != "Loved Tracks" || !isOwnUserPlaylist) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   getPlaylistsContainingTrack(trackId, lovedTracksPlaylist=false, otherUserPlaylists=false) {
     var inPlaylists = [];
     Object.entries(this.playlists).map(([pId, playlist]) => {
-      const isOwnUserPlaylist = (playlist.creator == ElementFinder.getProfileId());
-      if (otherUserPlaylists || isOwnUserPlaylist) {  // Consider only user's playlist if not specified
-        if (lovedTracksPlaylist || playlist.title != "Loved Tracks" || !isOwnUserPlaylist) {
-          if (this.getTracksInPlaylist(pId).includes(String(trackId))) {
-            inPlaylists.push(playlist.title);
-          }
+      if (this.isPlaylistValid(pId, lovedTracksPlaylist, otherUserPlaylists)) {
+        if (this.getTracksInPlaylist(pId).includes(String(trackId))) {
+          inPlaylists.push(playlist.title);
         }
       }
     });
@@ -552,7 +561,7 @@ class DeezierArea {
       if(track && track.getAttribute('deezier-token')) {
           continue  // Song unavailable or already marked with a token
       }
-      var titleElmt, inPlaylistsName;
+      var titleElmt, inPlaylistsName = [];
       var trackId = ElementFinder.getTrackIdFromElement(track);
       if (trackId) {
         titleElmt = track.querySelector(".cell-title");
@@ -561,7 +570,9 @@ class DeezierArea {
         const trackInfos = ElementFinder.getTrackInfosFromElement(track);  // Cannot get directly track id, but we have artist/album id + name of the track
         titleElmt = trackInfos.title_elmt;
         const inPlaylistsId = this.library.getPlaylistsMatchingTrackFromArtist(trackInfos.artist_id, trackInfos.title, trackInfos.album_id);
-        inPlaylistsName = inPlaylistsId.map(pId => this.library.getPlaylist(pId).title);
+        if (this.library.isPlaylistValid(inPlaylistsId)) {
+          inPlaylistsName = inPlaylistsId.map(pId => this.library.getPlaylist(pId).title);
+        }
       }
       if (inPlaylistsName.length) {  // track is in at least one playlist
         titleElmt.parentElement.insertBefore(ElementBuilder.createInPlaylistToken(inPlaylistsName), titleElmt);
