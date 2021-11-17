@@ -1,5 +1,4 @@
 // ==UserScript==
-// ==UserScript==
 // @name        Deezier
 // @namespace   Violentmonkey Scripts
 // @match       https://www.deezer.*/*
@@ -69,7 +68,7 @@ class ElementBuilder {
     });
     var searchField = this.createElement('input', {
       attributes: {placeholder: "Search in playlists ...", type: "text"},
-      style : {'border-style': 'none'}
+      style : {'border-style': 'none', 'background-color': '#191922', 'color': '#a5a5ae'}
     });
     var searchBar = this.createElement('div', {
       style: {border: '1px solid', margin:'20px 30px 5px 5px'},
@@ -99,7 +98,8 @@ class ElementBuilder {
         width: '200px',
         'overflow-y': 'scroll',
         border: '1px #aabbcc solid',
-        padding: '10px'
+        padding: '10px',
+        'margin-left': '5px'
 	    }
     });
     return list;
@@ -366,7 +366,10 @@ class MusicLibrary {
   }
 
   [Symbol.iterator]() {
-    return Object.entries(this.playlists)[Symbol.iterator]();
+    function orderPlaylists([idA, plA], [idB, plB]) {
+      return plA.time_lastmodif < plB.time_lastmodif;
+    }
+    return Object.entries(this.playlists).sort(orderPlaylists)[Symbol.iterator]();
   }
 
   addArtist(artistId, artistName) {
