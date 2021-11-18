@@ -220,7 +220,7 @@ class ElementFinder {
     return {
       title: titleElmt.querySelector(this.OBFUSCATED.track_title_only).innerText, title_elmt: titleElmt,
       album_name: albumElmt.innerText, album_id: albumElmt.firstElementChild.firstElementChild.getAttribute('href').split('/').pop(),
-      artist: artistElmt.innerText, artist_id: artistElmt.firstElementChild.firstElementChild.getAttribute('href').split('/').pop()
+      artist_name: artistElmt.innerText, artist_id: artistElmt.firstElementChild.firstElementChild.getAttribute('href').split('/').pop()
     };
   }
 
@@ -481,21 +481,37 @@ class MusicLibrary {
     return artist['albums'];
   }
 
-  getAlbumTracksFromArtist(artistId, albumId) {
-    // From the known artists, return the album object if it exists or null
+  getAlbumTracksFromArtist(artistId, albumId, albumName=null) {
+    // From the known artists, return the album object if it exists by id, or the id of a matching album title if
+    // the id doesn't exist anymore
     const artist = this.getArtist(artistId);
     if (!artist) { return null }
-    if (!artist['albums'][albumId]) { return null }
+    if (!artist['albums'][albumId]) {
+      // Try to get best match on title because Deezer fucked up and returned obsolete id
+      var matchingAlbum = null;
+      Object.entries(artist['albums']).map(([albumId, album]) => {
+        if (album.album_name === albumName) {
+          matchingAlbum = albumId;
+        }
+      });
+      return matchingAlbum;
+    }
     return artist['albums'][albumId]['album_tracks'] || null;
   }
 
-  getPlaylistsMatchingTrackFromArtist(artistId, trackTitle, albumId=null, onlySimilarTracks=false) {
-    // Sometimes we don't have the track id itself (only title), so we use known artist stuff to determine if
-    // the track is present in the library. Returns an array of playlist names the track is in.
+  getPlaylistsMatchingTrackFromArtist(artistId, trackTitle, albumId=null, albumName=null, onlySimilarTracks=false) {
+    // Sometimes we don't have the track id itself (only title), so we use known artist/album stuff to determine if
+    // the track is present in the library. Tries to perform the best, sometimes album id doesn't exist anymore but actually the
+    // album name matches (likely Deezer API returns obsolete info). Returns an array of playlist names the track is in.
     const inPlaylists = [];
     if (albumId) {
-      var albumTracks = this.getAlbumTracksFromArtist(artistId, albumId);
-      if (albumTracks === null) {
+      var albumTracks = this.getAlbumTracksFromArtist(artistId, albumId, albumName);
+      if (typeof albumTracks === "string") {
+        // The album id we had in artist library was likely obsolete, but got another album id by matching album name
+        const matchingAlbumId = albumTracks;
+        albumTracks = this.getAlbumTracksFromArtist(artistId, matchingAlbumId);
+        console.log("Was unable to get album", albumId, albumName, "but found a match by name", matchingAlbumId, "where track", trackTitle, "is part of", albumTracks);
+      } else if (albumTracks === null) {
         console.error("While looking for track matching", trackTitle, ", didn't find any tracks in album", albumId, "of artist", artistId, this.getArtist(artistId));
         albumTracks = {};
       }
@@ -569,10 +585,10 @@ class DeezierArea {
       } else {  // Likely we are in the case classnames are obfuscated
         const trackInfos = ElementFinder.getTrackInfosFromElement(track);  // Cannot get directly track id, but we have artist/album id + name of the track
         titleElmt = trackInfos.title_elmt;
-        const inPlaylistsId = this.library.getPlaylistsMatchingTrackFromArtist(trackInfos.artist_id, trackInfos.title, trackInfos.album_id);
-        if (this.library.isPlaylistValid(inPlaylistsId)) {
-          inPlaylistsName = inPlaylistsId.map(pId => this.library.getPlaylist(pId).title);
-        }
+        var inPlaylistsId = this.library.getPlaylistsMatchingTrackFromArtist(trackInfos.artist_id, trackInfos.title, trackInfos.album_id, trackInfos.album_name);
+        inPlaylistsName = inPlaylistsId.filter(pId => this.library.isPlaylistValid(pId)).map(pId => {
+          return this.library.getPlaylist(pId).title;
+        });
       }
       if (inPlaylistsName.length) {  // track is in at least one playlist
         titleElmt.parentElement.insertBefore(ElementBuilder.createInPlaylistToken(inPlaylistsName), titleElmt);
