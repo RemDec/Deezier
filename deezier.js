@@ -224,6 +224,11 @@ class ElementFinder {
     };
   }
 
+  static getElmtToMonitorPage() {
+    // Element whose class is passed temporarily to 'opened' every time user arrive to a new view
+    return document.getElementById("page_loader");
+  }
+
   static getElmtToMonitorScrolling() {
     var elmtToMonitor, isObfuscated;
     const datagridElmt = document.getElementsByClassName("datagrid");
@@ -249,20 +254,53 @@ class DOM_Monitor {
   /* Manage observers on DOM elements */
 
   static SCROLLING_OBS = 'scrolling';
+  static PAGE_OBS = 'pageloading';
 
   constructor() {
-    this.observers = {}
+    this.observers = {};
   }
 
   createObserver(name, domElmt, callback, options={}) {
     options = Object.assign( { attributes: true, childList: false }, options);
+    if (this.observers[name] !== undefined) {
+      console.log("Disconnect listening DOM observer", name, this.observers[name]);
+      this.observers[name].disconnect();
+    }
     this.observers[name] = new MutationObserver(callback);
     this.observers[name].observe(domElmt, options);
+    console.log("Created a new listening DOM observer named", name, this.observers);
   }
 
+  createPageChangeObserver() {
+    const elmtToMonitor = ElementFinder.getElmtToMonitorPage();
+    if (elmtToMonitor == null) {
+      console.error("Didn't find the DOM element page_loader to monitor page loading...");
+      return false;
+    }
+    const thisForCallback = this;
+    function cbPageChanged(mutationsList) {
+      mutationsList.forEach(mutation => {
+        if (mutation.type === "attributes" && mutation.attributeName === "class") {
+          if (!mutation.target.classList.contains("opened")) {  // process when state is flipped back from opened
+            function newScrollingObs() {
+              if (!thisForCallback.createScrollingObserver()) {
+                console.log("New page view loaded but no element to monitor scrolling found in");
+              }
+            }
+            // Let the time for DOM to be filled in with components
+            setTimeout(newScrollingObs, 500);
+          }
+        }
+      });
+    }
+    this.createObserver(DOM_Monitor.PAGE_OBS, elmtToMonitor, cbPageChanged);
+    return true;
+  }
 
   createScrollingObserver() {
-    var [elmtToMonitor, isObfuscated] = ElementFinder.getElmtToMonitorScrolling();
+    const scrollElmtFound = ElementFinder.getElmtToMonitorScrolling();
+    if (scrollElmtFound === null) { return false }
+    var [elmtToMonitor, isObfuscated] = scrollElmtFound;
     if (elmtToMonitor == null) { return false }
     function cbScrolling(mutationsList) {
       var newTrackAdded = false;
@@ -279,7 +317,7 @@ class DOM_Monitor {
       if (newTrackAdded) { DeezierArea.getInstance().appendInPlaylistTokens(); }
     };
     var options = isObfuscated ? { childList: true, subtree: true, attributes: false } : { };
-    this.createObserver(this.SCROLLING_OBS, elmtToMonitor, cbScrolling, options);
+    this.createObserver(DOM_Monitor.SCROLLING_OBS, elmtToMonitor, cbScrolling, options);
     return true;
   }
 
@@ -565,7 +603,8 @@ class DeezierArea {
     this.libraryViewElmt = document.getElementById(ID_LIBRARY_ELMT);
     this.setLibraryViewPlaylists();
     // Setup observers on DOM elements
-    this.domObserver.createScrollingObserver();
+    this.domObserver.createScrollingObserver();  // don't wait until we load a new page view to try it
+    this.domObserver.createPageChangeObserver();
   }
 
   appendInPlaylistTokens() {
@@ -630,7 +669,6 @@ class DeezierArea {
 
 
 
-console.log("DEEZIER");
 
 async function process() {
   console.log("Start Deezier process ..");
@@ -654,6 +692,6 @@ function delayStart(delay=2000) {
   setTimeout(process, delay);
 }
 
+console.log("DEEZIER");
 delayStart();
-
 
