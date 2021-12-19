@@ -16,6 +16,13 @@ class Util {
   static stringsSimilar(baseStr, againstStr) {
     return (baseStr === againstStr); //TODO
   }
+  
+  static idFromHref(elmt) {
+    // Isolate the part after last slash '/' of the href URL for the given element
+    if (!elmt) { return console.error("Tried to retrieve id from href of an undefined element") }
+    const href = elmt.getAttribute("href") || '';
+    return href.split('/').pop() || null;
+  }
 
 }
 
@@ -43,7 +50,7 @@ class ElementBuilder {
       style: {color: 'green', 'border-color': 'green'}
     });
     return this.createElement('div', {
-      classes: "datagrid-cell cell-explicit-small",
+      classes: "datagrid-cell cell-explicit-small deezier-token",
       attributes: {title: inPlaylists.join('\n')},
       children: [tokenContent]
     });
@@ -193,6 +200,28 @@ class ElementFinder {
   static getSidebar() {
     // Deezer original left sidebar, present in all views
     return document.getElementsByClassName("nano-content")[0];
+  }
+  
+  static getPlayer() {
+    // The player element, expected to be always present at page bottom
+    return document.getElementById("page_player");
+  }
+  
+  static getCurrentTrackInPlayer() {
+    // The track currently played in the player and info about it (cannot get track id directly)
+    const player = this.getPlayer();
+    if (!player) { return null; }
+    const trackElmt = player.getElementsByClassName("track-title")[0];
+    if (!trackElmt) { return null; }
+    const [titleElmt, artistElmt] = trackElmt.getElementsByClassName("track-link");
+    if (!titleElmt || !artistElmt) { return null; }
+    return {
+      track: trackElmt,
+      artist_id: Util.idFromHref(artistElmt),
+      artist_name: artistElmt.innerText,
+      album_id: Util.idFromHref(titleElmt),  // clicking on the title redirects to album it's in actually
+      title: titleElmt.innerText
+    }
   }
 
   static getTracksInPage() {
@@ -447,6 +476,13 @@ class MusicLibrary {
   getPlaylist(id) {
     return this.playlists[id] || null;
   }
+  
+  getPlaylistsNameFromId(playlistIds, keepOmitted=false) {
+    if (!keepOmitted) {
+      playlistIds = playlistIds.filter(pId => this.isPlaylistListable(pId));
+    }
+    return playlistIds.map(pId => this.getPlaylist(pId).title);
+  }
 
   getTracksInPlaylist(playlistId, onlyTrackIds=true) {
     if (this.playlists[playlistId] !== undefined) {
@@ -461,7 +497,8 @@ class MusicLibrary {
     return allTracks;
   }
 
-  isPlaylistValid(pId, lovedTracksPlaylist=false, otherUserPlaylists=false) {
+  isPlaylistListable(pId, lovedTracksPlaylist=false, otherUserPlaylists=false) {
+    // When we list some playlists, we want to omit some undesired specific ones
     const playlist = this.getPlaylist(pId);
     if (playlist === null) { return false }
     const isOwnUserPlaylist = (playlist.creator == ElementFinder.getProfileId());
@@ -476,7 +513,7 @@ class MusicLibrary {
   getPlaylistsContainingTrack(trackId, lovedTracksPlaylist=false, otherUserPlaylists=false) {
     var inPlaylists = [];
     Object.entries(this.playlists).map(([pId, playlist]) => {
-      if (this.isPlaylistValid(pId, lovedTracksPlaylist, otherUserPlaylists)) {
+      if (this.isPlaylistListable(pId, lovedTracksPlaylist, otherUserPlaylists)) {
         if (this.getTracksInPlaylist(pId).includes(String(trackId))) {
           inPlaylists.push(playlist.title);
         }
@@ -609,6 +646,7 @@ class DeezierArea {
 
   appendInPlaylistTokens() {
     // Add a 'V' token in the frontend beside every song already present in a user's playlist
+    // 1. Potential tracks in current page view (playlist, album)
     var tracks = ElementFinder.getTracksInPage();
     console.log("Found", tracks.length, "tracks on this page !", tracks);
     // TODO : not very efficient to go through the whole library for each track >:(
@@ -625,7 +663,7 @@ class DeezierArea {
         const trackInfos = ElementFinder.getTrackInfosFromElement(track);  // Cannot get directly track id, but we have artist/album id + name of the track
         titleElmt = trackInfos.title_elmt;
         var inPlaylistsId = this.library.getPlaylistsMatchingTrackFromArtist(trackInfos.artist_id, trackInfos.title, trackInfos.album_id, trackInfos.album_name);
-        inPlaylistsName = inPlaylistsId.filter(pId => this.library.isPlaylistValid(pId)).map(pId => {
+        inPlaylistsName = inPlaylistsId.filter(pId => this.library.isPlaylistListable(pId)).map(pId => {
           return this.library.getPlaylist(pId).title;
         });
       }
@@ -633,6 +671,19 @@ class DeezierArea {
         titleElmt.parentElement.insertBefore(ElementBuilder.createInPlaylistToken(inPlaylistsName), titleElmt);
         track.setAttribute('deezier-token', 1);
       }
+    }
+    // 2. The current track in the player at the bottom
+    const currTrackInfo = ElementFinder.getCurrentTrackInPlayer();
+    if (!currTrackInfo) { return null; }
+    var titleElmt = currTrackInfo.track;
+    if (titleElmt.getAttribute('deezier-token')) {
+      titleElmt.parentNode.getElementsByClassName("deezier-token")[0].remove();
+    }
+    var inPlaylistsId = this.library.getPlaylistsMatchingTrackFromArtist(currTrackInfo.artist_id, currTrackInfo.title, currTrackInfo.album_id);
+    var inPlaylistsName = this.library.getPlaylistsNameFromId(inPlaylistsId);
+    if (inPlaylistsName.length) {
+      titleElmt.parentElement.insertBefore(ElementBuilder.createInPlaylistToken(inPlaylistsName), titleElmt);
+      titleElmt.setAttribute('deezier-token', 1);
     }
   }
 
@@ -686,6 +737,7 @@ async function process() {
   console.log("Injecting Deezier area in left side panel..");
   area.injectInPage();
   console.log("End Deezier process ..");
+  console.log(ElementFinder.getCurrentTrackInPlayer());
 }
 
 function delayStart(delay=2000) {
@@ -694,4 +746,5 @@ function delayStart(delay=2000) {
 
 console.log("DEEZIER");
 delayStart();
+
 
