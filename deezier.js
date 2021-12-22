@@ -13,10 +13,11 @@ const ID_SCROLL_MONITOR_ELMT = 'deezier-scrollelmt';
 
 class Util {
 
-  static stringsSimilar(baseStr, againstStr) {
-    return (baseStr === againstStr); //TODO
+  static simplifyString(str) {
+      // "Les stations balnéaires (version acoustique) [remix]" -> "lesstationsbalnaires"
+      return str.replace(/[\[("].*[\])"]|\W/g, '').toLowerCase();
   }
-  
+
   static idFromHref(elmt) {
     // Isolate the part after last slash '/' of the href URL for the given element
     if (!elmt) { return console.error("Tried to retrieve id from href of an undefined element") }
@@ -201,12 +202,12 @@ class ElementFinder {
     // Deezer original left sidebar, present in all views
     return document.getElementsByClassName("nano-content")[0];
   }
-  
+
   static getPlayer() {
     // The player element, expected to be always present at page bottom
     return document.getElementById("page_player");
   }
-  
+
   static getCurrentTrackInPlayer() {
     // The track currently played in the player and info about it (cannot get track id directly)
     const player = this.getPlayer();
@@ -476,7 +477,7 @@ class MusicLibrary {
   getPlaylist(id) {
     return this.playlists[id] || null;
   }
-  
+
   getPlaylistsNameFromId(playlistIds, keepOmitted=false) {
     if (!keepOmitted) {
       playlistIds = playlistIds.filter(pId => this.isPlaylistListable(pId));
@@ -558,7 +559,7 @@ class MusicLibrary {
 
   getAlbumTracksFromArtist(artistId, albumId, albumName=null) {
     // From the known artists, return the album object if it exists by id, or the id of a matching album title if
-    // the id doesn't exist anymore
+    // the id doesn't exist anymore (it was returned by Deezer API which is inconsistent)
     const artist = this.getArtist(artistId);
     if (!artist) { return null }
     if (!artist['albums'][albumId]) {
@@ -572,6 +573,24 @@ class MusicLibrary {
       return matchingAlbum;
     }
     return artist['albums'][albumId]['album_tracks'] || null;
+  }
+
+  getSimilarTracksFromArtist(artistId) {
+    const albums = this.getAlbumsFromArtist(artistId);
+    if (!albums) { return null; }
+    const similars = {};  // indexed by a canonical representation of track's name
+    Object.values(albums).map(album => {
+      Object.entries(album.album_tracks).map(([trackId, track]) => {
+        var simplified = Util.simplifyString(track.title);
+        var newEntry = {track_id: trackId, title: track.title, inPlaylists: track.inPlaylists};
+        if (similars[simplified] === undefined) {
+          similars[simplified] = [newEntry];
+        } else {
+          similars[simplified].push(newEntry);
+        }
+      });
+    });
+    return Object.fromEntries(Object.entries(similars).filter(([_, arrSimTracks]) => arrSimTracks.length > 1));
   }
 
   getPlaylistsMatchingTrackFromArtist(artistId, trackTitle, albumId=null, albumName=null, onlySimilarTracks=false) {
@@ -737,7 +756,7 @@ async function process() {
   console.log("Injecting Deezier area in left side panel..");
   area.injectInPage();
   console.log("End Deezier process ..");
-  console.log(ElementFinder.getCurrentTrackInPlayer());
+  //setTimeout(() => console.log(lib.getSimilarTracksFromArtist('413')), 15000);
 }
 
 function delayStart(delay=2000) {
@@ -746,5 +765,4 @@ function delayStart(delay=2000) {
 
 console.log("DEEZIER");
 delayStart();
-
 
