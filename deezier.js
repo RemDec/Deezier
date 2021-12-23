@@ -17,7 +17,7 @@ class Util {
       // "Les stations balnéaires (version acoustique) [remix]" -> "lesstationsbalnaires"
       return str.replace(/[\[("].*[\])"]|\W/g, '').toLowerCase();
   }
-
+  
   static idFromHref(elmt) {
     // Isolate the part after last slash '/' of the href URL for the given element
     if (!elmt) { return console.error("Tried to retrieve id from href of an undefined element") }
@@ -39,7 +39,7 @@ class ElementBuilder {
     if (innerHtml) { elmt.innerHTML = innerHtml; }
     Object.keys(attributes).map(k => { elmt.setAttribute(k, attributes[k]) });
     Object.assign(elmt.style, style);
-    children.map(child => elmt.appendChild(child));
+    (Array.isArray(children) ? children : [children]).map(child => elmt.appendChild(child));
     return elmt;
   }
 
@@ -79,7 +79,7 @@ class ElementBuilder {
       style : {'border-style': 'none', 'background-color': '#191922', 'color': '#a5a5ae'}
     });
     var searchBar = this.createElement('div', {
-      style: {border: '1px solid', margin:'20px 30px 5px 5px'},
+      style: {border: '1px solid', display: 'inline-block'},
       children: [glass, searchField]}
     );
 
@@ -96,6 +96,29 @@ class ElementBuilder {
     });
     return searchBar;
   }
+  
+  static createExpandButton() {
+    // A button to expand the library view in a popup coming in front of the page
+    var div = this.createElement('div', {
+      style: {	
+        'background-color': "#2d2d2d",
+	      width: "fit-content",
+	      'border-radius': "4px",
+	      border: "1px solid",
+        display: 'inline-block',
+        'margin-left': "2px"
+      },
+      children: this.createElement('button', { innerHtml: "<b>⛶</b>", style: { width: "25px", color: "rgb(165, 165, 174)" } })
+    });
+    return div;
+  }
+  
+  static createLibraryListTopBar() {
+    return this.createElement('div', {
+      style: { margin: "15px 1px 5px 5px" },
+      children: [this.createSearchbar(), this.createExpandButton()]
+    });
+  }
 
   static createLibraryList() {
     // The frame where the list elements will live
@@ -103,7 +126,7 @@ class ElementBuilder {
       id: ID_LIBRARY_ELMT,
       style: {
         height: '250px',
-        width: '200px',
+        width: '211px',
         'overflow-y': 'scroll',
         border: '1px #aabbcc solid',
         padding: '10px',
@@ -170,7 +193,7 @@ class ElementBuilder {
     // The global panel where Deezier's components live
     var area = document.createElement("div");
     area.appendChild(ElementBuilder.createBtnDetectInPlaylistTracks());
-    area.appendChild(ElementBuilder.createSearchbar());
+    area.appendChild(ElementBuilder.createLibraryListTopBar());
     area.appendChild(ElementBuilder.createLibraryList());
     return area;
   }
@@ -202,12 +225,12 @@ class ElementFinder {
     // Deezer original left sidebar, present in all views
     return document.getElementsByClassName("nano-content")[0];
   }
-
+  
   static getPlayer() {
     // The player element, expected to be always present at page bottom
     return document.getElementById("page_player");
   }
-
+  
   static getCurrentTrackInPlayer() {
     // The track currently played in the player and info about it (cannot get track id directly)
     const player = this.getPlayer();
@@ -477,7 +500,7 @@ class MusicLibrary {
   getPlaylist(id) {
     return this.playlists[id] || null;
   }
-
+  
   getPlaylistsNameFromId(playlistIds, keepOmitted=false) {
     if (!keepOmitted) {
       playlistIds = playlistIds.filter(pId => this.isPlaylistListable(pId));
@@ -550,7 +573,7 @@ class MusicLibrary {
   getArtist(id) {
     return this.artists[id] || null;
   }
-
+  
   getArtistIds() {
     return Object.keys(this.artists);
   }
@@ -578,7 +601,7 @@ class MusicLibrary {
     }
     return artist['albums'][albumId]['album_tracks'] || null;
   }
-
+  
   getSimilarTracksFromArtist(artistId) {
     // For an artist, get similar tracks by name. Return an object indexed by canonical name with as value an array
     // of tracks matching this canonical name, thus to consider as similar tracks
@@ -605,12 +628,12 @@ class MusicLibrary {
     artistIds.map(artistId => {
       const simTracks = this.getSimilarTracksFromArtist(artistId);
       if (Object.keys(simTracks).length) {
-        simTracksByArtist[artistId] = Object.values(simTracks);
+        simTracksByArtist[artistId] = Object.values(simTracks); 
       }
     });
     return simTracksByArtist;
   }
-
+  
   getPlaylistsMatchingTrackFromArtist(artistId, trackTitle, albumId=null, albumName=null, onlySimilarTracks=false) {
     // Sometimes we don't have the track id itself (only title), so we use known artist/album stuff to determine if
     // the track is present in the library. Tries to perform the best, sometimes album id doesn't exist anymore but actually the
@@ -644,7 +667,7 @@ class MusicLibrary {
     }
     return inPlaylists;
   }
-
+  
 
   display() {
     console.log("Music library for user", this.profileId, '\nPlaylists:', this.playlists, '\nArtists', this.artists);
