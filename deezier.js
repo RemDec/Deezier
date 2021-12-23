@@ -551,6 +551,10 @@ class MusicLibrary {
     return this.artists[id] || null;
   }
 
+  getArtistIds() {
+    return Object.keys(this.artists);
+  }
+
   getAlbumsFromArtist(artistId) {
     const artist = this.getArtist(artistId);
     if (!artist) { return null }
@@ -576,6 +580,8 @@ class MusicLibrary {
   }
 
   getSimilarTracksFromArtist(artistId) {
+    // For an artist, get similar tracks by name. Return an object indexed by canonical name with as value an array
+    // of tracks matching this canonical name, thus to consider as similar tracks
     const albums = this.getAlbumsFromArtist(artistId);
     if (!albums) { return null; }
     const similars = {};  // indexed by a canonical representation of track's name
@@ -591,6 +597,18 @@ class MusicLibrary {
       });
     });
     return Object.fromEntries(Object.entries(similars).filter(([_, arrSimTracks]) => arrSimTracks.length > 1));
+  }
+
+  getSimilarTracksGroupedByArtist(artistIds=[]) {
+    var artistIds = artistIds.length ? artistIds : this.getArtistIds();
+    const simTracksByArtist = {};
+    artistIds.map(artistId => {
+      const simTracks = this.getSimilarTracksFromArtist(artistId);
+      if (Object.keys(simTracks).length) {
+        simTracksByArtist[artistId] = Object.values(simTracks);
+      }
+    });
+    return simTracksByArtist;
   }
 
   getPlaylistsMatchingTrackFromArtist(artistId, trackTitle, albumId=null, albumName=null, onlySimilarTracks=false) {
@@ -626,6 +644,7 @@ class MusicLibrary {
     }
     return inPlaylists;
   }
+
 
   display() {
     console.log("Music library for user", this.profileId, '\nPlaylists:', this.playlists, '\nArtists', this.artists);
@@ -756,7 +775,7 @@ async function process() {
   console.log("Injecting Deezier area in left side panel..");
   area.injectInPage();
   console.log("End Deezier process ..");
-  //setTimeout(() => console.log(lib.getSimilarTracksFromArtist('413')), 15000);
+  //setTimeout(() => console.log(lib.getSimilarTracksGroupedByArtist()), 15000);
 }
 
 function delayStart(delay=2000) {
