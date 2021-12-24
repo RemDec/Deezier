@@ -10,6 +10,7 @@
 
 const ID_LIBRARY_ELMT = 'deezier-library';
 const ID_SCROLL_MONITOR_ELMT = 'deezier-scrollelmt';
+const ID_POPUP_ELMT = 'deezier-popup';
 
 class Util {
 
@@ -17,7 +18,7 @@ class Util {
       // "Les stations balnéaires (version acoustique) [remix]" -> "lesstationsbalnaires"
       return str.replace(/[\[("].*[\])"]|\W/g, '').toLowerCase();
   }
-  
+
   static idFromHref(elmt) {
     // Isolate the part after last slash '/' of the href URL for the given element
     if (!elmt) { return console.error("Tried to retrieve id from href of an undefined element") }
@@ -96,11 +97,14 @@ class ElementBuilder {
     });
     return searchBar;
   }
-  
+
   static createExpandButton() {
     // A button to expand the library view in a popup coming in front of the page
-    var div = this.createElement('div', {
-      style: {	
+    const expandButton = this.createElement('button', { innerHtml: "<b>⛶</b>", style: { width: "25px", color: "rgb(165, 165, 174)" } });
+    expandButton.addEventListener("click", () =>
+                                 DeezierArea.getInstance().openDeezierPopup());
+    return this.createElement('div', {
+      style: {
         'background-color': "#2d2d2d",
 	      width: "fit-content",
 	      'border-radius': "4px",
@@ -108,11 +112,10 @@ class ElementBuilder {
         display: 'inline-block',
         'margin-left': "2px"
       },
-      children: this.createElement('button', { innerHtml: "<b>⛶</b>", style: { width: "25px", color: "rgb(165, 165, 174)" } })
+      children: expandButton
     });
-    return div;
   }
-  
+
   static createLibraryListTopBar() {
     return this.createElement('div', {
       style: { margin: "15px 1px 5px 5px" },
@@ -197,6 +200,48 @@ class ElementBuilder {
     area.appendChild(ElementBuilder.createLibraryList());
     return area;
   }
+
+  static createPopupPanel() {
+    const deezierTitle = this.createElement("div", {
+      inner: "deezier",
+      style: {
+        font: "bold 3em Deezer",
+        color: "white",
+        display: "inline-block",
+        "padding-left": "23px"
+      }
+    });
+    const closePopupButton = this.createElement("button", {
+      inner: "✕",
+      style: {
+        "font-size": "2em",
+        display: "inline-block",
+        float: "right",
+        "padding-right": "10px"
+      }
+    });
+    closePopupButton.addEventListener("click", () => DeezierArea.getInstance().closeDeezierPopup());
+    const header = this.createElement("div", {
+      children: [deezierTitle, closePopupButton, this.createElement("hr")]
+    });
+    const popupContainer = this.createElement("div", {
+      id: ID_POPUP_ELMT,
+      style: {
+        width: "1000px",
+        height: "800px",
+        "z-index": "100",
+        position: "fixed",
+        left: "500px",
+        top: "100px",
+        "background-color": "#272731",
+        "border-radius": "9px"
+      },
+      children: [header]
+    });
+
+    return popupContainer;
+  }
+
 }
 
 
@@ -212,6 +257,10 @@ class ElementFinder {
     track_title_only: '.BT3T6,._2QglM,._3cxEI'  // track_title can contain explicit 'E' token or InPlaylist 'V' token + special case track unavailable
   };
 
+  static getDeezerApp() {
+    return document.getElementById("dzr-app");
+  }
+
   static getProfileId() {
     // Discover the user id by looking at current page
     var l = document.getElementsByClassName("sidebar-nav-link is-main");
@@ -225,12 +274,12 @@ class ElementFinder {
     // Deezer original left sidebar, present in all views
     return document.getElementsByClassName("nano-content")[0];
   }
-  
+
   static getPlayer() {
     // The player element, expected to be always present at page bottom
     return document.getElementById("page_player");
   }
-  
+
   static getCurrentTrackInPlayer() {
     // The track currently played in the player and info about it (cannot get track id directly)
     const player = this.getPlayer();
@@ -500,7 +549,7 @@ class MusicLibrary {
   getPlaylist(id) {
     return this.playlists[id] || null;
   }
-  
+
   getPlaylistsNameFromId(playlistIds, keepOmitted=false) {
     if (!keepOmitted) {
       playlistIds = playlistIds.filter(pId => this.isPlaylistListable(pId));
@@ -573,7 +622,7 @@ class MusicLibrary {
   getArtist(id) {
     return this.artists[id] || null;
   }
-  
+
   getArtistIds() {
     return Object.keys(this.artists);
   }
@@ -601,7 +650,7 @@ class MusicLibrary {
     }
     return artist['albums'][albumId]['album_tracks'] || null;
   }
-  
+
   getSimilarTracksFromArtist(artistId) {
     // For an artist, get similar tracks by name. Return an object indexed by canonical name with as value an array
     // of tracks matching this canonical name, thus to consider as similar tracks
@@ -628,12 +677,12 @@ class MusicLibrary {
     artistIds.map(artistId => {
       const simTracks = this.getSimilarTracksFromArtist(artistId);
       if (Object.keys(simTracks).length) {
-        simTracksByArtist[artistId] = Object.values(simTracks); 
+        simTracksByArtist[artistId] = Object.values(simTracks);
       }
     });
     return simTracksByArtist;
   }
-  
+
   getPlaylistsMatchingTrackFromArtist(artistId, trackTitle, albumId=null, albumName=null, onlySimilarTracks=false) {
     // Sometimes we don't have the track id itself (only title), so we use known artist/album stuff to determine if
     // the track is present in the library. Tries to perform the best, sometimes album id doesn't exist anymore but actually the
@@ -667,7 +716,7 @@ class MusicLibrary {
     }
     return inPlaylists;
   }
-  
+
 
   display() {
     console.log("Music library for user", this.profileId, '\nPlaylists:', this.playlists, '\nArtists', this.artists);
@@ -746,6 +795,24 @@ class DeezierArea {
       titleElmt.parentElement.insertBefore(ElementBuilder.createInPlaylistToken(inPlaylistsName), titleElmt);
       titleElmt.setAttribute('deezier-token', 1);
     }
+  }
+
+  openDeezierPopup() {
+    if (document.getElementById(ID_POPUP_ELMT) !== null) {
+      console.error("Deezier popup already opened");
+      return;
+    }
+    const popupElmt = ElementBuilder.createPopupPanel();
+    ElementFinder.getDeezerApp().appendChild(popupElmt);
+  }
+
+  closeDeezierPopup() {
+    const popupElmt = document.getElementById(ID_POPUP_ELMT);
+    if (popupElmt === null) {
+      console.error("Tried to close Deezier popup not opened");
+      return;
+    }
+    popupElmt.remove();
   }
 
   searchInLibrary(tomatch) {
