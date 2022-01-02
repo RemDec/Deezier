@@ -255,7 +255,8 @@ class ElementBuilder {
 
 
 class ElementFinder {
-  /* Find DOM elements */
+  /* Find diverse DOM elements in the current view. At some point, Deezer start to obfuscate classnames, but this is not
+   * always used. We support both case, based on hardcoded obfuscated names. */
 
   static OBFUSCATED = {
     container_tracks: 'YrLz6',
@@ -276,7 +277,7 @@ class ElementFinder {
     var l = document.getElementsByClassName("sidebar-nav-link is-main");
     for (let e of l) {
       var res = e.href.match(/.*profile\/(\d+)/);
-      if (res) { return res[1] }
+      if (res) { return res[1]; }
     }
   }
 
@@ -289,6 +290,8 @@ class ElementFinder {
     // The player element, expected to be always present at page bottom
     return document.getElementById("page_player");
   }
+
+  /* Tracks related elements */
 
   static getCurrentTrackInPlayer() {
     // The track currently played in the player and info about it (cannot get track id directly)
@@ -304,7 +307,7 @@ class ElementFinder {
       artist_name: artistElmt.innerText,
       album_id: Util.idFromHref(titleElmt),  // clicking on the title redirects to album it's in actually
       title: titleElmt.innerText
-    }
+    };
   }
 
   static getTracksInPage() {
@@ -333,10 +336,12 @@ class ElementFinder {
     const artistElmt = albumElmt.previousSibling;
     return {
       title: titleElmt.querySelector(this.OBFUSCATED.track_title_only).innerText, title_elmt: titleElmt,
-      album_name: albumElmt.innerText, album_id: albumElmt.firstElementChild.firstElementChild.getAttribute('href').split('/').pop(),
-      artist_name: artistElmt.innerText, artist_id: artistElmt.firstElementChild.firstElementChild.getAttribute('href').split('/').pop()
+      album_name: albumElmt.innerText, album_id: Util.idFromHref(albumElmt.firstElementChild.firstElementChild),
+      artist_name: artistElmt.innerText, artist_id: Util.idFromHref(artistElmt.firstElementChild.firstElementChild)
     };
   }
+
+  /* Elements to monitor by observers */
 
   static getElmtToMonitorPage() {
     // Element whose class is passed temporarily to 'opened' every time user arrive to a new view
@@ -349,12 +354,12 @@ class ElementFinder {
     const datagridElmt = document.getElementsByClassName("datagrid");
     if (datagridElmt.length) {
       const parent = datagridElmt[0];
-      if (parent.childNodes.length <= 1) { return null }
+      if (parent.childNodes.length <= 1) { return null; }
       elmtToMonitor = parent.childNodes[1];
       isObfuscated = false;
     } else {  // Likely we are in obfuscated case
       const trackContainer = document.getElementsByClassName(this.OBFUSCATED.container_tracks);
-      if (!trackContainer.length) { return null }
+      if (!trackContainer.length) { return null; }
       elmtToMonitor = trackContainer[0];
       isObfuscated = true;
     }
