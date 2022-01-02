@@ -291,6 +291,14 @@ class ElementFinder {
     return document.getElementById("page_player");
   }
 
+  static getLibrary() {
+    return document.getElementById(ID_LIBRARY_ELMT);
+  }
+
+  static getDeezierPopup() {
+    return document.getElementById(ID_POPUP_ELMT);
+  }
+
   /* Tracks related elements */
 
   static getCurrentTrackInPlayer() {
@@ -456,6 +464,41 @@ class MusicLibrary {
     this.artists = {};  // index by artist id
   }
 
+  /* Pulling playlists & tracks from Deezer API and feed the library indexes (playlists + artists) */
+
+  async fetchPlaylists() {
+    // From the known user id, retrieve from Deezer API the list of his personal playlist and filter out interesting metadata
+    const response = await fetch(`https://api.deezer.com/user/${this.profileId}/playlists&limit=1000`);
+    const playlists = await response.json();
+    return playlists.data.map(p => ({
+      id: p.id,
+      url: p.link,
+      title: p.title,
+      length: p.nb_tracks,
+      creator: p.creator.id,
+      url_tracks: p.tracklist,
+      url_picture: p.picture,
+      time_lastmodif: p.time_mod
+    }));
+  }
+
+  async fetchTracks(playlistId) {
+    // From a playlist id, retrieve from Deezer API the list of tracks in and filter out interesting metadata
+    const response = await fetch(`${this.playlists[playlistId].url_tracks}&limit=1000`);
+    const tracks = await response.json();
+    return tracks.data.map(t => ({
+      track_id : t.id,
+      title: t.title,
+      url: t.link,
+      artist_id: t.artist.id,
+      artist_name: t.artist.name,
+      artist_url: t.artist.link,
+      album_id: t.album.id,
+      album_name: t.album.title,
+      album_url: t.album.tracklist
+    }));
+  }
+
   async computePlaylists() {
     // Fill the playlists index with metadata from the user playlists (not yet the tracks in these)
     // The 'tracks' field with actual track data has to be filled afterwards calling fetchTracks()
@@ -493,87 +536,24 @@ class MusicLibrary {
     }
   }
 
-  async fetchPlaylists() {
-    // From the known user id, retrieve from Deezer API the list of his personal playlist and filter out interesting metadata
-    const response = await fetch(`https://api.deezer.com/user/${this.profileId}/playlists&limit=1000`);
-    const playlists = await response.json();
-    return playlists.data.map(p => ({
-      id: p.id,
-      url: p.link,
-      title: p.title,
-      length: p.nb_tracks,
-      creator: p.creator.id,
-      url_tracks: p.tracklist,
-      url_picture: p.picture,
-      time_lastmodif: p.time_mod
-    }));
-  }
-
-  async fetchTracks(playlistId) {
-    // From a playlist id, retrieve from Deezer API the list of tracks in and filter out interesting metadata
-    const response = await fetch(`${this.playlists[playlistId].url_tracks}&limit=1000`);
-    const tracks = await response.json();
-    return tracks.data.map(t => ({
-      track_id : t.id,
-      title: t.title,
-      url: t.link,
-      artist_id: t.artist.id,
-      artist_name: t.artist.name,
-      artist_url: t.artist.link,
-      album_id: t.album.id,
-      album_name: t.album.title,
-      album_url: t.album.tracklist
-    }));
-  }
-
-  [Symbol.iterator]() {
-    // Iterate over the indexed playlist in modification order (latest first)
-    function orderPlaylists([idA, plA], [idB, plB]) {
-      return plA.time_lastmodif < plB.time_lastmodif;
-    }
-    return Object.entries(this.playlists).sort(orderPlaylists)[Symbol.iterator]();
-  }
-
-  addArtist(artistId, artistName) {
-    // Add an artist to the library's artist index and return it (not added if already present)
-    const currArtist = this.artists[artistId];
-    if (currArtist) { return currArtist }
-    const newArtist = {
-      artist_name: artistName,
-      albums: { }
-    };
-    this.artists[artistId] = newArtist;
-    return newArtist;
-  }
-
-  addAlbumToArtist(artistId, albumId, albumName) {
-    // Add an album to a known artist in the library's artist index and return it (not added if already present)
-    const currAlbum = this.artists[artistId]['albums'][albumId];
-    if (currAlbum) { return currAlbum }
-    const newAlbum = {
-      album_name: albumName,
-      album_tracks: { }
-    };
-    this.artists[artistId]['albums'][albumId] = newAlbum;
-    return newAlbum;
-  }
-
-  addTrackToArtistAlbum(artistId, albumId, trackId, trackName, inPlaylist) {
-    // Add a track id to the referenced ones for a know album of an artist in the library's artist index and return it (not added if already present)
-    const currTrack = this.artists[artistId]['albums'][albumId]['album_tracks'][trackId];
-    if (currTrack) { return currTrack }
-    const newTrack = {
-      title: trackName,
-      inPlaylists: [inPlaylist]
-    };
-    this.artists[artistId]['albums'][albumId]['album_tracks'][trackId] = newTrack;
-    return newTrack;
-  }
-
+  /* Methods related to the playlist index */
 
   getPlaylist(id) {
     // Return an indexed playlist in the library by id
     return this.playlists[id] || null;
+  }
+
+  isPlaylistListable(pId, lovedTracksPlaylist=false, otherUserPlaylists=false) {
+    // When we list some playlists, we want to omit some undesired specific ones using known criteria
+    const playlist = this.getPlaylist(pId);
+    if (playlist === null) { return false }
+    const isOwnUserPlaylist = (playlist.creator == ElementFinder.getProfileId());
+    if (otherUserPlaylists || isOwnUserPlaylist) {  // consider only user's playlist if not specified
+      if (lovedTracksPlaylist || playlist.title != "Loved Tracks" || !isOwnUserPlaylist) {
+        return true;
+      }
+    }
+    return false;
   }
 
   getPlaylistsNameFromId(playlistIds, keepOmitted=false) {
@@ -599,19 +579,6 @@ class MusicLibrary {
     return allTracks;
   }
 
-  isPlaylistListable(pId, lovedTracksPlaylist=false, otherUserPlaylists=false) {
-    // When we list some playlists, we want to omit some undesired specific ones using known criteria
-    const playlist = this.getPlaylist(pId);
-    if (playlist === null) { return false }
-    const isOwnUserPlaylist = (playlist.creator == ElementFinder.getProfileId());
-    if (otherUserPlaylists || isOwnUserPlaylist) {  // consider only user's playlist if not specified
-      if (lovedTracksPlaylist || playlist.title != "Loved Tracks" || !isOwnUserPlaylist) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   getPlaylistsContainingTrack(trackId, lovedTracksPlaylist=false, otherUserPlaylists=false) {
     // From a track id, return all playlists (title) we have containing the track in the library's playlists index
     var inPlaylists = [];
@@ -626,7 +593,7 @@ class MusicLibrary {
   }
 
   searchMathingTracks(tomatch) {
-    // From the playlists, retrieve all tracks matching a pattern (used in track research). Returns an object
+    // From the playlists, retrieve all tracks matching a pattern (used in search bar). Returns an object
     // indexed by playlist id in which a match is found, either on the track title or the artist (separated in 2 arrays)
     const re = RegExp(tomatch, 'i');
     const matchedPlaylists = {};
@@ -648,6 +615,8 @@ class MusicLibrary {
     });
     return matchedPlaylists;
   }
+
+  /* Methods related to the artist index */
 
   getArtist(id) {
     // From an artist id, return what we have in the library's artists index
@@ -682,6 +651,42 @@ class MusicLibrary {
       return matchingAlbum;
     }
     return artist['albums'][albumId]['album_tracks'] || null;
+  }
+
+  addArtist(artistId, artistName) {
+    // Add an artist to the library's artist index and return it (not added if already present)
+    const currArtist = this.artists[artistId];
+    if (currArtist) { return currArtist; }
+    const newArtist = {
+      artist_name: artistName,
+      albums: { }
+    };
+    this.artists[artistId] = newArtist;
+    return newArtist;
+  }
+
+  addAlbumToArtist(artistId, albumId, albumName) {
+    // Add an album to a known artist in the library's artist index and return it (not added if already present)
+    const currAlbum = this.artists[artistId]['albums'][albumId];
+    if (currAlbum) { return currAlbum; }
+    const newAlbum = {
+      album_name: albumName,
+      album_tracks: { }
+    };
+    this.artists[artistId]['albums'][albumId] = newAlbum;
+    return newAlbum;
+  }
+
+  addTrackToArtistAlbum(artistId, albumId, trackId, trackName, inPlaylist) {
+    // Add a track id to the referenced ones for a know album of an artist in the library's artist index and return it (not added if already present)
+    const currTrack = this.artists[artistId]['albums'][albumId]['album_tracks'][trackId];
+    if (currTrack) { return currTrack; }
+    const newTrack = {
+      title: trackName,
+      inPlaylists: [inPlaylist]
+    };
+    this.artists[artistId]['albums'][albumId]['album_tracks'][trackId] = newTrack;
+    return newTrack;
   }
 
   getSimilarTracksFromArtist(artistId) {
@@ -752,6 +757,16 @@ class MusicLibrary {
     return inPlaylists;
   }
 
+  /* Object methods */
+
+  [Symbol.iterator]() {
+    // Iterate over the indexed playlist in modification order (latest first)
+    function orderPlaylists([idA, plA], [idB, plB]) {
+      return plA.time_lastmodif < plB.time_lastmodif;
+    }
+    return Object.entries(this.playlists).sort(orderPlaylists)[Symbol.iterator]();
+  }
+
   display() {
     console.log("Music library for user", this.profileId, '\nPlaylists:', this.playlists, '\nArtists', this.artists);
   }
@@ -768,9 +783,7 @@ class DeezierArea {
       DeezierArea._instance = this;
     }
     this.library = library;  // the library gather all stuff related to user's playlists
-    this.libraryViewElmt = null;
     this.domObserver = new DOM_Monitor();  // an object used to manage DOM listeners
-    this.panelArea = null;
     return DeezierArea._instance;
   }
 
@@ -780,9 +793,7 @@ class DeezierArea {
 
   injectInPage() {
     // inject the actual DOM area panel in the left side bar of Deezer interface
-    this.panelArea = ElementBuilder.createDeezierPanelArea();
-    ElementFinder.getSidebar().appendChild(this.panelArea);
-    this.libraryViewElmt = document.getElementById(ID_LIBRARY_ELMT);
+    ElementFinder.getSidebar().appendChild(ElementBuilder.createDeezierPanelArea());
     this.setLibraryViewPlaylists();
     // setup observers on DOM elements
     this.domObserver.createScrollingObserver();  // don't wait until we load a new page view to try it
@@ -796,11 +807,11 @@ class DeezierArea {
     console.log("Found", tracks.length, "tracks on this page !", tracks);
     // TODO : not very efficient to go through the whole library for each track >:(
     for (let track of tracks) {
-      if(track && track.getAttribute('deezier-token')) {
-          continue  // song unavailable or already marked with a token
-      }
+      if(track && track.getAttribute('deezier-token')) { continue; } // song unavailable or already marked with a token
+
       var titleElmt, inPlaylistsName = [];
       var trackId = ElementFinder.getTrackIdFromElement(track);
+
       if (trackId) {
         titleElmt = track.querySelector(".cell-title");
         inPlaylistsName = this.library.getPlaylistsContainingTrack(trackId);
@@ -808,10 +819,9 @@ class DeezierArea {
         const trackInfos = ElementFinder.getTrackInfosFromElement(track);  // cannot get directly track id, but we have artist/album id + name of the track
         titleElmt = trackInfos.title_elmt;
         var inPlaylistsId = this.library.getPlaylistsMatchingTrackFromArtist(trackInfos.artist_id, trackInfos.title, trackInfos.album_id, trackInfos.album_name);
-        inPlaylistsName = inPlaylistsId.filter(pId => this.library.isPlaylistListable(pId)).map(pId => {
-          return this.library.getPlaylist(pId).title;
-        });
+        inPlaylistsName = this.library.getPlaylistsNameFromId(inPlaylistsId);
       }
+
       if (inPlaylistsName.length) {  // track is in at least one playlist
         titleElmt.parentElement.insertBefore(ElementBuilder.createInPlaylistToken(inPlaylistsName), titleElmt);
         track.setAttribute('deezier-token', 1);
@@ -821,8 +831,9 @@ class DeezierArea {
     const currTrackInfo = ElementFinder.getCurrentTrackInPlayer();
     if (!currTrackInfo) { return null; }
     var titleElmt = currTrackInfo.track;
+
     if (titleElmt.getAttribute('deezier-token')) {
-      titleElmt.parentNode.getElementsByClassName("deezier-token")[0].remove();
+      titleElmt.parentNode.getElementsByClassName('deezier-token')[0].remove();
     }
     var inPlaylistsId = this.library.getPlaylistsMatchingTrackFromArtist(currTrackInfo.artist_id, currTrackInfo.title, currTrackInfo.album_id);
     var inPlaylistsName = this.library.getPlaylistsNameFromId(inPlaylistsId);
@@ -832,62 +843,59 @@ class DeezierArea {
     }
   }
 
-  openDeezierPopup() {
-    // Spawn a popup when the expand button is triggered, where we have more space to display library
-    if (document.getElementById(ID_POPUP_ELMT) !== null) {
-      console.error("Deezier popup already opened");
-      return;
-    }
-    const popupElmt = ElementBuilder.createPopupPanel();
-    ElementFinder.getDeezerApp().appendChild(popupElmt);
-  }
-
-  closeDeezierPopup() {
-    // Close the popup
-    const popupElmt = document.getElementById(ID_POPUP_ELMT);
-    if (popupElmt === null) {
-      console.error("Tried to close Deezier popup not opened");
-      return;
-    }
-    popupElmt.remove();
-  }
-
   searchInLibrary(tomatch) {
-    // TODO some cache system when typing a new following letter, only look in previous result because we narrow down
-    return this.library.searchMathingTracks(tomatch)
+    // From a given pattern, search in the built library for some matches on title/artist name
+    return this.library.searchMathingTracks(tomatch);
   }
 
   cleanLibraryView() {
     // Remove the content of the library view from its container
-    while (this.libraryViewElmt.firstChild) { this.libraryViewElmt.firstChild.remove() }
+    const libraryElmt = ElementFinder.getLibrary();
+    while (libraryElmt.firstChild) { libraryElmt.firstChild.remove(); }
+    return libraryElmt;
   }
 
   setLibraryViewPlaylists() {
     // Fill in the library view with the list of user's playlists
-    this.cleanLibraryView();
-    this.libraryViewElmt.style.removeProperty('overflow-x');
-    ElementBuilder.createLibraryListElmts().map(p => this.libraryViewElmt.appendChild(p));
+    const libraryElmt = this.cleanLibraryView();
+    libraryElmt.style.removeProperty('overflow-x');
+    ElementBuilder.createLibraryListElmts().map(p => libraryElmt.appendChild(p));
   }
 
   setLibraryViewSearchResults(searchResults) {
     // Fill the library view with the results of a research done in the dedicated Deezier searchbar
-    this.cleanLibraryView();
-    this.libraryViewElmt.style['overflow-x'] = 'scroll';
-    ElementBuilder.createLibrarySearchResultsElmts(searchResults).map(p => this.libraryViewElmt.appendChild(p));
-  }
-
-  getPanelArea() {
-    return this.panelArea;
+    const libraryElmt = this.cleanLibraryView();
+    libraryElmt.style['overflow-x'] = "scroll";
+    ElementBuilder.createLibrarySearchResultsElmts(searchResults).map(p => libraryElmt.appendChild(p));
   }
 
   getLibrary() {
     return this.library;
   }
 
+  openDeezierPopup() {
+    // Spawn a popup when the expand button is triggered, where we have more space to display library
+    if (ElementFinder.getDeezierPopup() === null) {
+      ElementFinder.getDeezerApp().appendChild(ElementBuilder.createPopupPanel());
+    } else {
+      console.error("Deezier popup already opened");
+    }
+  }
+
+  closeDeezierPopup() {
+    // Close the popup
+    const popupElmt = ElementFinder.getDeezierPopup();
+    if (popupElmt !== null) {
+      popupElmt.remove();
+    } else {
+      console.error("Tried to close Deezier popup not opened");
+    }
+  }
+
 }
 
 
-
+/* Main function */
 
 async function process() {
   console.log("Start Deezier process ..");
@@ -898,19 +906,20 @@ async function process() {
   }
   var lib = new MusicLibrary(userId);
   var area = new DeezierArea(lib);
+  console.log("Retrieving playlists for user", userId, "...");
   await lib.computePlaylists();
-  console.log("Retrieving tracks from all playlists in library..");
-  lib.computeTracks(playlistIds=[]); // no await here to avoid blocking too much time
+  console.log("Retrieving tracks from all playlists in library ...");
+  lib.computeTracks(); // no await here to avoid blocking too much time
   lib.display();
-  console.log("Injecting Deezier area in left side panel..");
+  console.log("Injecting Deezier area in left side panel ...");
   area.injectInPage();
-  console.log("End Deezier process ..");
+  console.log("End Deezier process ...");
 }
 
 function delayStart(delay=2000) {
   setTimeout(process, delay);
 }
 
-console.log("DEEZIER");
+console.log("===== DEEZIER =====");
 delayStart();
 
