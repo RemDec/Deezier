@@ -13,6 +13,7 @@ const ID_SCROLL_MONITOR_ELMT = 'deezier-scrollelmt';
 const ID_POPUP_ELMT = 'deezier-popup';
 
 class Util {
+  /* Collection of useful functions for general purpose */
 
   static simplifyString(str) {
       // "Les stations balnéaires (version acoustique) [remix]" -> "lesstationsbalnaires"
@@ -29,9 +30,10 @@ class Util {
 }
 
 class ElementBuilder {
-  /* Create DOM elements */
+  /* Factory to create DOM elements to inject in deezer app (all native) */
 
   static createElement(name, properties={}) {
+    // Generic snippet to create an arbitrary element along with its properties/children
     const { id, classes, inner, innerHtml, attributes={}, style={}, children=[] } = properties;
     var elmt = document.createElement(name);
     if (id) { elmt.id = id; }
@@ -45,7 +47,7 @@ class ElementBuilder {
   }
 
   static createInPlaylistToken(inPlaylists) {
-    // Create a little visual marker meaning 'already present in a playlist'
+    // Create a little visual marker meaning 'already present in a playlist' in Deezer style (like the 'E' for explicit song)
     var tokenContent = this.createElement('div',{
       classes: "explicit outline small",
       inner: inPlaylists.length == 1 ? 'V' : inPlaylists.length,
@@ -59,18 +61,17 @@ class ElementBuilder {
   }
 
   static createBtnDetectInPlaylistTracks() {
-    // The button to trigger the adding of tokens
+    // A button to trigger the detection and adding of tokens to the already added tracks
     var btnDetectInPlaylistTracks = this.createElement("button", {
       inner: "Detect Added Tracks",
       style: { padding: '5px', border: '1px solid', margin: '5px', 'margin-left': '20px'}
     });
-    btnDetectInPlaylistTracks.addEventListener('click', () =>
-                                               DeezierArea.getInstance().appendInPlaylistTokens());
+    btnDetectInPlaylistTracks.addEventListener('click', () => DeezierArea.getInstance().appendInPlaylistTokens());
     return btnDetectInPlaylistTracks;
   }
 
   static createSearchbar() {
-    // A searchbar that will determines the content displayed in the list below
+    // A searchbar element that will determine the content displayed in the 'library list' below
     var glass = this.createElement('div', {
       inner: "🔎",
       style: {float: 'left', margin: '2px 8px 1px 2px'}
@@ -90,7 +91,7 @@ class ElementBuilder {
         if (tomatch.length == 0) {
           DeezierArea.getInstance().setLibraryViewPlaylists();
         }
-        return; // TODO If comes back to 0 reset view to get rid of research
+        return;
       }
       const matches = DeezierArea.getInstance().searchInLibrary(tomatch);
       DeezierArea.getInstance().setLibraryViewSearchResults(matches);
@@ -99,10 +100,9 @@ class ElementBuilder {
   }
 
   static createExpandButton() {
-    // A button to expand the library view in a popup coming in front of the page
+    // A button to expand the library view in a popup coming in front of the Deezer app page
     const expandButton = this.createElement('button', { innerHtml: "<b>⛶</b>", style: { width: "25px", color: "rgb(165, 165, 174)" } });
-    expandButton.addEventListener("click", () =>
-                                 DeezierArea.getInstance().openDeezierPopup());
+    expandButton.addEventListener("click", () => DeezierArea.getInstance().openDeezierPopup());
     return this.createElement('div', {
       style: {
         'background-color': "#2d2d2d",
@@ -117,6 +117,7 @@ class ElementBuilder {
   }
 
   static createLibraryListTopBar() {
+    // The bar above the library list element made up of the searchbar + expand button
     return this.createElement('div', {
       style: { margin: "15px 1px 5px 5px" },
       children: [this.createSearchbar(), this.createExpandButton()]
@@ -124,7 +125,7 @@ class ElementBuilder {
   }
 
   static createLibraryList() {
-    // The frame where the list elements will live
+    // The frame where the library list elements will live, to be filled later with these ones
     var list = this.createElement('div', {
       id: ID_LIBRARY_ELMT,
       style: {
@@ -140,7 +141,7 @@ class ElementBuilder {
   }
 
   static createLibraryListElmts() {
-    // Build a list with created elements from all playlists in library
+    // Build a list filled with items that are the playlists known in the library
     var elmts = [];
     for (let [pId, playlist] of DeezierArea.getInstance().getLibrary()) {
       var playlistLinkElmt = this.createElement('a', {
@@ -155,17 +156,18 @@ class ElementBuilder {
   }
 
   static createLibrarySearchResultsElmts(searchResults) {
+    // From the results of a research made in the searchbar, build the items to fill in the library list displaying matches
     var elmts = [];
     var lib = DeezierArea.getInstance().getLibrary();
     Object.entries(searchResults).map(([pId, results]) => {
       var playlist = lib.getPlaylist(pId);
       var children = [];
-      // Name of playlist we fond results in
+      // name of playlist we fond results in
       children.push(this.createElement('a', {
         innerHtml:`<b>[   ${playlist.title} (${results.title.length + results.artist.length})   ]</b>`,
         attributes: {href: playlist.url}
       }));
-      // Elements in first serie under playlist name are matches on the song title
+      // elements in first serie under playlist name are matches on the song title
       results.title.map((track, i, {length}) => {
         children.push(this.createElement('br'));
         var branchStyle = i == length-1 ? (results.artist.length ? '┡' : '┗') : '┣';
@@ -175,7 +177,7 @@ class ElementBuilder {
           style: {'white-space': 'nowrap'}
         }));
       });
-      // Elements in second serie under playlist name are matches on the artist name
+      // elements in second serie under playlist name are matches on the artist name
       results.artist.map((track, i, {length}) => {
         children.push(this.createElement('br'));
         var branchStyle = i == length-1 ? '┗' : '┣';
@@ -202,6 +204,8 @@ class ElementBuilder {
   }
 
   static createPopupPanel() {
+    // A popup that is spawned when the expand button is clicked, giving more space to display the library list items etc.
+    // header of the spawned popup panel
     const deezierTitle = this.createElement("div", {
       inner: "deezier",
       style: {
@@ -221,9 +225,13 @@ class ElementBuilder {
       }
     });
     closePopupButton.addEventListener("click", () => DeezierArea.getInstance().closeDeezierPopup());
-    const header = this.createElement("div", {
+    const popupHeader = this.createElement("div", {
       children: [deezierTitle, closePopupButton, this.createElement("hr")]
     });
+    // body of the popup
+    const popupBody = this.createElement("div");
+
+    // build up header and body together in a popup element
     const popupContainer = this.createElement("div", {
       id: ID_POPUP_ELMT,
       style: {
@@ -236,7 +244,7 @@ class ElementBuilder {
         "background-color": "#272731",
         "border-radius": "9px"
       },
-      children: [header]
+      children: [popupHeader, popupBody]
     });
 
     return popupContainer;
@@ -258,6 +266,7 @@ class ElementFinder {
   };
 
   static getDeezerApp() {
+    // The root of the Deezer application
     return document.getElementById("dzr-app");
   }
 
@@ -271,7 +280,7 @@ class ElementFinder {
   }
 
   static getSidebar() {
-    // Deezer original left sidebar, present in all views
+    // Deezer original left sidebar, present in whatever is the current app view
     return document.getElementsByClassName("nano-content")[0];
   }
 
@@ -298,7 +307,7 @@ class ElementFinder {
   }
 
   static getTracksInPage() {
-    // Build an array of tracks present in current page (beware Deezer adjust it dynamically when scrolling)
+    // Build an array of tracks present in current page (beware Deezer adjusts it dynamically when scrolling)
     var tracks = document.getElementsByClassName("datagrid-row song");
     if (!tracks.length) {
       tracks = document.getElementsByClassName(this.OBFUSCATED.track);
@@ -307,6 +316,7 @@ class ElementFinder {
   }
 
   static getTrackIdFromElement(trackElement) {
+    // From a track element, find out its id (only usable when not obfuscated, otherwise it isn't present at all)
     var titleElmts = trackElement.getElementsByClassName("datagrid-label-main title");
     if (!titleElmts.length) {
       return null;
@@ -316,6 +326,7 @@ class ElementFinder {
   }
 
   static getTrackInfosFromElement(trackElement) {
+    // Get the maximum information from a track element in the case it is obfuscated (no more id so we do the best)
     const titleElmt = trackElement.getElementsByClassName(this.OBFUSCATED.track_title)[0];
     const albumElmt = trackElement.getElementsByClassName(this.OBFUSCATED.album)[0];
     const artistElmt = albumElmt.previousSibling;
@@ -332,6 +343,7 @@ class ElementFinder {
   }
 
   static getElmtToMonitorScrolling() {
+    // A container for the tracks in the current view Deezer maintains, that can be monitored to detect new ones spawned
     var elmtToMonitor, isObfuscated;
     const datagridElmt = document.getElementsByClassName("datagrid");
     if (datagridElmt.length) {
@@ -353,7 +365,7 @@ class ElementFinder {
 
 
 class DOM_Monitor {
-  /* Manage observers on DOM elements */
+  /* Manage observers on DOM elements to track the Deezer app state and events */
 
   static SCROLLING_OBS = 'scrolling';
   static PAGE_OBS = 'pageloading';
@@ -363,6 +375,7 @@ class DOM_Monitor {
   }
 
   createObserver(name, domElmt, callback, options={}) {
+    // Add a new observer to the maintained one, by index (if already existing it is properly replaced)
     options = Object.assign( { attributes: true, childList: false }, options);
     if (this.observers[name] !== undefined) {
       console.log("Disconnect listening DOM observer", name, this.observers[name]);
@@ -374,6 +387,7 @@ class DOM_Monitor {
   }
 
   createPageChangeObserver() {
+    // Observer triggered when a new content view is loaded in deezer app
     const elmtToMonitor = ElementFinder.getElmtToMonitorPage();
     if (elmtToMonitor == null) {
       console.error("Didn't find the DOM element page_loader to monitor page loading...");
@@ -389,8 +403,7 @@ class DOM_Monitor {
                 console.log("New page view loaded but no element to monitor scrolling found in");
               }
             }
-            // Let the time for DOM to be filled in with components
-            setTimeout(newScrollingObs, 500);
+            setTimeout(newScrollingObs, 500);  // let the time for DOM to be filled in with components
           }
         }
       });
@@ -400,6 +413,7 @@ class DOM_Monitor {
   }
 
   createScrollingObserver() {
+    // Observer triggered when new tracks are added by deezer (at scrolling) in the containing element
     const scrollElmtFound = ElementFinder.getElmtToMonitorScrolling();
     if (scrollElmtFound === null) { return false }
     var [elmtToMonitor, isObfuscated] = scrollElmtFound;
@@ -427,17 +441,18 @@ class DOM_Monitor {
 
 
 class MusicLibrary {
-  /* For an user, maintain an index of his personal playlists and fill the tracks listed in */
+  /* For an user, maintain an index of his personal playlists and feed it with the tracks listed in, along with another structure
+   * indexed by artists that are in those playlists pulled from the Deezer API. */
 
   constructor(profileId) {
     this.profileId = profileId;
-    this.playlists = {};
-    this.artists = {};
+    this.playlists = {};  // index by playlist id
+    this.artists = {};  // index by artist id
   }
 
   async computePlaylists() {
-    // Fill the inner playlists object with metadata from the user playlists (not the tracks in yet)
-    // The tracks field has to be filled afterwards calling fetchTracks()
+    // Fill the playlists index with metadata from the user playlists (not yet the tracks in these)
+    // The 'tracks' field with actual track data has to be filled afterwards calling fetchTracks()
     var pList = await this.fetchPlaylists();
     console.log("Fetched", pList.length, "playlists");
     pList.map(p => {
@@ -465,7 +480,6 @@ class MusicLibrary {
         const artist = this.addArtist(t.artist_id, t.artist_name);
         const album = this.addAlbumToArtist(t.artist_id, t.album_id, t.album_name);
         const track = this.addTrackToArtistAlbum(t.artist_id, t.album_id, t.track_id, t.title, p);
-
         if (!track['inPlaylists'].includes(p)) {
           track['inPlaylists'].push(p);
         }
@@ -474,7 +488,7 @@ class MusicLibrary {
   }
 
   async fetchPlaylists() {
-    // Get URIs list of all personal playlists from the given user, where a playlist is an object gathering useful fields about it
+    // From the known user id, retrieve from Deezer API the list of his personal playlist and filter out interesting metadata
     const response = await fetch(`https://api.deezer.com/user/${this.profileId}/playlists&limit=1000`);
     const playlists = await response.json();
     return playlists.data.map(p => ({
@@ -490,6 +504,7 @@ class MusicLibrary {
   }
 
   async fetchTracks(playlistId) {
+    // From a playlist id, retrieve from Deezer API the list of tracks in and filter out interesting metadata
     const response = await fetch(`${this.playlists[playlistId].url_tracks}&limit=1000`);
     const tracks = await response.json();
     return tracks.data.map(t => ({
@@ -506,6 +521,7 @@ class MusicLibrary {
   }
 
   [Symbol.iterator]() {
+    // Iterate over the indexed playlist in modification order (latest first)
     function orderPlaylists([idA, plA], [idB, plB]) {
       return plA.time_lastmodif < plB.time_lastmodif;
     }
@@ -513,6 +529,7 @@ class MusicLibrary {
   }
 
   addArtist(artistId, artistName) {
+    // Add an artist to the library's artist index and return it (not added if already present)
     const currArtist = this.artists[artistId];
     if (currArtist) { return currArtist }
     const newArtist = {
@@ -524,6 +541,7 @@ class MusicLibrary {
   }
 
   addAlbumToArtist(artistId, albumId, albumName) {
+    // Add an album to a known artist in the library's artist index and return it (not added if already present)
     const currAlbum = this.artists[artistId]['albums'][albumId];
     if (currAlbum) { return currAlbum }
     const newAlbum = {
@@ -535,6 +553,7 @@ class MusicLibrary {
   }
 
   addTrackToArtistAlbum(artistId, albumId, trackId, trackName, inPlaylist) {
+    // Add a track id to the referenced ones for a know album of an artist in the library's artist index and return it (not added if already present)
     const currTrack = this.artists[artistId]['albums'][albumId]['album_tracks'][trackId];
     if (currTrack) { return currTrack }
     const newTrack = {
@@ -547,10 +566,12 @@ class MusicLibrary {
 
 
   getPlaylist(id) {
+    // Return an indexed playlist in the library by id
     return this.playlists[id] || null;
   }
 
   getPlaylistsNameFromId(playlistIds, keepOmitted=false) {
+    // From a playlist ids list, return the corresponding names (maybe discarding some non listable ones)
     if (!keepOmitted) {
       playlistIds = playlistIds.filter(pId => this.isPlaylistListable(pId));
     }
@@ -558,24 +579,26 @@ class MusicLibrary {
   }
 
   getTracksInPlaylist(playlistId, onlyTrackIds=true) {
+    // From a playlist id, return the known tracks metadata (or only ids) we have in the index for this playlist
     if (this.playlists[playlistId] !== undefined) {
       return Object.entries(this.playlists[playlistId].tracks).map(([tId, track]) => onlyTrackIds ? tId : track);
     }
-    return []
+    return [];
   }
 
   getAllTracks(onlyTrackIds=true) {
+    // Build an array with all known tracks in the library's playlist index
     var allTracks = [];
     Object.keys(this.playlists).map(pId => allTracks.push(...this.getTracksInPlaylist(pId, onlyTrackIds)));
     return allTracks;
   }
 
   isPlaylistListable(pId, lovedTracksPlaylist=false, otherUserPlaylists=false) {
-    // When we list some playlists, we want to omit some undesired specific ones
+    // When we list some playlists, we want to omit some undesired specific ones using known criteria
     const playlist = this.getPlaylist(pId);
     if (playlist === null) { return false }
     const isOwnUserPlaylist = (playlist.creator == ElementFinder.getProfileId());
-    if (otherUserPlaylists || isOwnUserPlaylist) {  // Consider only user's playlist if not specified
+    if (otherUserPlaylists || isOwnUserPlaylist) {  // consider only user's playlist if not specified
       if (lovedTracksPlaylist || playlist.title != "Loved Tracks" || !isOwnUserPlaylist) {
         return true;
       }
@@ -584,6 +607,7 @@ class MusicLibrary {
   }
 
   getPlaylistsContainingTrack(trackId, lovedTracksPlaylist=false, otherUserPlaylists=false) {
+    // From a track id, return all playlists (title) we have containing the track in the library's playlists index
     var inPlaylists = [];
     Object.entries(this.playlists).map(([pId, playlist]) => {
       if (this.isPlaylistListable(pId, lovedTracksPlaylist, otherUserPlaylists)) {
@@ -620,21 +644,24 @@ class MusicLibrary {
   }
 
   getArtist(id) {
+    // From an artist id, return what we have in the library's artists index
     return this.artists[id] || null;
   }
 
   getArtistIds() {
+    // Return the list of known artist ids in the library's artists index
     return Object.keys(this.artists);
   }
 
   getAlbumsFromArtist(artistId) {
+    // From an artist id, return all the known albums in the library's artists index
     const artist = this.getArtist(artistId);
     if (!artist) { return null }
     return artist['albums'];
   }
 
   getAlbumTracksFromArtist(artistId, albumId, albumName=null) {
-    // From the known artists, return the album object if it exists by id, or the id of a matching album title if
+    // From the known artists, return the album object if it exists by id, or the id of an exactly matching album title if
     // the id doesn't exist anymore (it was returned by Deezer API which is inconsistent)
     const artist = this.getArtist(artistId);
     if (!artist) { return null }
@@ -652,8 +679,8 @@ class MusicLibrary {
   }
 
   getSimilarTracksFromArtist(artistId) {
-    // For an artist, get similar tracks by name. Return an object indexed by canonical name with as value an array
-    // of tracks matching this canonical name, thus to consider as similar tracks
+    // For an artist, get the tracks that are similar by name. Return an object indexed by canonical name with as
+    // value an array of tracks matching this canonical name, thus to consider as 'similar' tracks
     const albums = this.getAlbumsFromArtist(artistId);
     if (!albums) { return null; }
     const similars = {};  // indexed by a canonical representation of track's name
@@ -672,6 +699,8 @@ class MusicLibrary {
   }
 
   getSimilarTracksGroupedByArtist(artistIds=[]) {
+    // For some artist ids or all, build an object indexed by artist id that contains arrays of tracks similar by
+    // title (similar tracks are grouped together in arrays) : aId -> [[simA1, simA2], [simB1, simB2, simB3], ...]
     var artistIds = artistIds.length ? artistIds : this.getArtistIds();
     const simTracksByArtist = {};
     artistIds.map(artistId => {
@@ -685,13 +714,13 @@ class MusicLibrary {
 
   getPlaylistsMatchingTrackFromArtist(artistId, trackTitle, albumId=null, albumName=null, onlySimilarTracks=false) {
     // Sometimes we don't have the track id itself (only title), so we use known artist/album stuff to determine if
-    // the track is present in the library. Tries to perform the best, sometimes album id doesn't exist anymore but actually the
-    // album name matches (likely Deezer API returns obsolete info). Returns an array of playlist names the track is in.
+    // the track is present in the library. Tries to perform the best, sometimes the album id doesn't exist anymore but actually
+    // the album name matches (likely Deezer API returns obsolete info). Returns an array of playlist names the track is in.
     const inPlaylists = [];
     if (albumId) {
       var albumTracks = this.getAlbumTracksFromArtist(artistId, albumId, albumName);
       if (typeof albumTracks === "string") {
-        // The album id we had in artist library was likely obsolete, but got another album id by matching album name
+        // the album id we had in artist library was likely obsolete, but got another album id by matching album name
         const matchingAlbumId = albumTracks;
         albumTracks = this.getAlbumTracksFromArtist(artistId, matchingAlbumId);
         console.log("Was unable to get album", albumId, albumName, "but found a match by name", matchingAlbumId, "where track", trackTitle, "is part of", albumTracks);
@@ -709,14 +738,13 @@ class MusicLibrary {
         }
       });
       return [... new Set(inPlaylists)];
-    } else {  // Will walk through all known albums of the given artist
+    } else {  // will walk through all known albums of the given artist
       return Object.keys(this.getAlbumsFromArtist(artistId)).foreach(albumId => {
         inPlaylists.push(... this.getMatchingTrackFromArtist(artistId, trackTitle, albumId, onlySimilarTracks));
       });
     }
     return inPlaylists;
   }
-
 
   display() {
     console.log("Music library for user", this.profileId, '\nPlaylists:', this.playlists, '\nArtists', this.artists);
@@ -726,30 +754,31 @@ class MusicLibrary {
 
 
 class DeezierArea {
-  /* The place where all the stuff Deezier is working on is gathered, mapping in DOM as an area in sidebar */
+  /* The place where all the stuff Deezier is working on is gathered, mapping in DOM as an additional area in the sidebar.
+   * Central point on which runtime methods can be called using the singleton. */
 
   constructor(library) {
     if(!DeezierArea._instance) {
       DeezierArea._instance = this;
     }
-    this.library = library;
+    this.library = library;  // the library gather all stuff related to user's playlists
     this.libraryViewElmt = null;
-    this.domObserver = new DOM_Monitor();
+    this.domObserver = new DOM_Monitor();  // an object used to manage DOM listeners
     this.panelArea = null;
     return DeezierArea._instance;
   }
 
   static getInstance() {
-    return this._instance;
+    return this._instance;  // singleton
   }
 
   injectInPage() {
-    // Inject the actual DOM area panel in the left side bar of Deezer interface
+    // inject the actual DOM area panel in the left side bar of Deezer interface
     this.panelArea = ElementBuilder.createDeezierPanelArea();
     ElementFinder.getSidebar().appendChild(this.panelArea);
     this.libraryViewElmt = document.getElementById(ID_LIBRARY_ELMT);
     this.setLibraryViewPlaylists();
-    // Setup observers on DOM elements
+    // setup observers on DOM elements
     this.domObserver.createScrollingObserver();  // don't wait until we load a new page view to try it
     this.domObserver.createPageChangeObserver();
   }
@@ -762,15 +791,15 @@ class DeezierArea {
     // TODO : not very efficient to go through the whole library for each track >:(
     for (let track of tracks) {
       if(track && track.getAttribute('deezier-token')) {
-          continue  // Song unavailable or already marked with a token
+          continue  // song unavailable or already marked with a token
       }
       var titleElmt, inPlaylistsName = [];
       var trackId = ElementFinder.getTrackIdFromElement(track);
       if (trackId) {
         titleElmt = track.querySelector(".cell-title");
         inPlaylistsName = this.library.getPlaylistsContainingTrack(trackId);
-      } else {  // Likely we are in the case classnames are obfuscated
-        const trackInfos = ElementFinder.getTrackInfosFromElement(track);  // Cannot get directly track id, but we have artist/album id + name of the track
+      } else {  // likely we are in the case classnames are obfuscated
+        const trackInfos = ElementFinder.getTrackInfosFromElement(track);  // cannot get directly track id, but we have artist/album id + name of the track
         titleElmt = trackInfos.title_elmt;
         var inPlaylistsId = this.library.getPlaylistsMatchingTrackFromArtist(trackInfos.artist_id, trackInfos.title, trackInfos.album_id, trackInfos.album_name);
         inPlaylistsName = inPlaylistsId.filter(pId => this.library.isPlaylistListable(pId)).map(pId => {
@@ -798,6 +827,7 @@ class DeezierArea {
   }
 
   openDeezierPopup() {
+    // Spawn a popup when the expand button is triggered, where we have more space to display library
     if (document.getElementById(ID_POPUP_ELMT) !== null) {
       console.error("Deezier popup already opened");
       return;
@@ -807,6 +837,7 @@ class DeezierArea {
   }
 
   closeDeezierPopup() {
+    // Close the popup
     const popupElmt = document.getElementById(ID_POPUP_ELMT);
     if (popupElmt === null) {
       console.error("Tried to close Deezier popup not opened");
@@ -821,16 +852,19 @@ class DeezierArea {
   }
 
   cleanLibraryView() {
+    // Remove the content of the library view from its container
     while (this.libraryViewElmt.firstChild) { this.libraryViewElmt.firstChild.remove() }
   }
 
   setLibraryViewPlaylists() {
+    // Fill in the library view with the list of user's playlists
     this.cleanLibraryView();
     this.libraryViewElmt.style.removeProperty('overflow-x');
     ElementBuilder.createLibraryListElmts().map(p => this.libraryViewElmt.appendChild(p));
   }
 
   setLibraryViewSearchResults(searchResults) {
+    // Fill the library view with the results of a research done in the dedicated Deezier searchbar
     this.cleanLibraryView();
     this.libraryViewElmt.style['overflow-x'] = 'scroll';
     ElementBuilder.createLibrarySearchResultsElmts(searchResults).map(p => this.libraryViewElmt.appendChild(p));
@@ -860,12 +894,11 @@ async function process() {
   var area = new DeezierArea(lib);
   await lib.computePlaylists();
   console.log("Retrieving tracks from all playlists in library..");
-  lib.computeTracks(playlistIds=[]); // No await here to avoid blocking too much time
+  lib.computeTracks(playlistIds=[]); // no await here to avoid blocking too much time
   lib.display();
   console.log("Injecting Deezier area in left side panel..");
   area.injectInPage();
   console.log("End Deezier process ..");
-  //setTimeout(() => console.log(lib.getSimilarTracksGroupedByArtist()), 15000);
 }
 
 function delayStart(delay=2000) {
