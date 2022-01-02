@@ -106,7 +106,7 @@ class ElementBuilder {
   static createExpandButton() {
     // A button to expand the library view in a popup coming in front of the Deezer app page
     const expandButton = this.createElement('button', { innerHtml: "<b>⛶</b>", style: { width: "25px", color: "rgb(165, 165, 174)" } });
-    expandButton.addEventListener("click", () => DeezierArea.getInstance().openDeezierPopup());
+    expandButton.addEventListener("click", () => DeezierArea.getInstance().toggleDeezierPopup());
     return this.createElement('div', {
       style: {
         'background-color': "#2d2d2d", width: "fit-content", 'border-radius': "4px",
@@ -219,7 +219,7 @@ class ElementBuilder {
         'padding-right': "10px"
       }
     });
-    closePopupButton.addEventListener("click", () => DeezierArea.getInstance().closeDeezierPopup());
+    closePopupButton.addEventListener("click", () => DeezierArea.getInstance().toggleDeezierPopup());
     return this.createElement("div", {
       children: [deezierTitle, closePopupButton, this.createElement("hr")]
     });
@@ -873,22 +873,13 @@ class DeezierArea {
     return this.library;
   }
 
-  openDeezierPopup() {
-    // Spawn a popup when the expand button is triggered, where we have more space to display library
-    if (ElementFinder.getDeezierPopup() === null) {
+  toggleDeezierPopup() {
+    // (De)spawn the deezier popup, where we have more space to display library & other Deezier stuff
+    const popupElmt = ElementFinder.getDeezierPopup();
+    if(popupElmt === null) {
       ElementFinder.getDeezerApp().appendChild(ElementBuilder.createPopupPanel());
     } else {
-      console.error("Deezier popup already opened");
-    }
-  }
-
-  closeDeezierPopup() {
-    // Close the popup
-    const popupElmt = ElementFinder.getDeezierPopup();
-    if (popupElmt !== null) {
       popupElmt.remove();
-    } else {
-      console.error("Tried to close Deezier popup not opened");
     }
   }
 
