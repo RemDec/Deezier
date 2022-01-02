@@ -421,9 +421,9 @@ class DOM_Monitor {
   createScrollingObserver() {
     // Observer triggered when new tracks are added by deezer (at scrolling) in the containing element
     const scrollElmtFound = ElementFinder.getElmtToMonitorScrolling();
-    if (scrollElmtFound === null) { return false }
+    if (scrollElmtFound === null) { return false; }
     var [elmtToMonitor, isObfuscated] = scrollElmtFound;
-    if (elmtToMonitor == null) { return false }
+    if (elmtToMonitor == null) { return false; }
     function cbScrolling(mutationsList) {
       var newTrackAdded = false;
       for(var mutation of mutationsList) {
