@@ -22,7 +22,7 @@ class Util {
 
   static idFromHref(elmt) {
     // Isolate the part after last slash '/' of the href URL for the given element
-    if (!elmt) { return console.error("Tried to retrieve id from href of an undefined element") }
+    if (!elmt) { return console.error("Tried to retrieve id from href of an undefined element"); }
     const href = elmt.getAttribute("href") || '';
     return href.split('/').pop() || null;
   }
@@ -46,12 +46,14 @@ class ElementBuilder {
     return elmt;
   }
 
+  /* Diverse DOM elements */
+
   static createInPlaylistToken(inPlaylists) {
     // Create a little visual marker meaning 'already present in a playlist' in Deezer style (like the 'E' for explicit song)
     var tokenContent = this.createElement('div',{
       classes: "explicit outline small",
-      inner: inPlaylists.length == 1 ? 'V' : inPlaylists.length,
-      style: {color: 'green', 'border-color': 'green'}
+      inner: inPlaylists.length == 1 ? "V" : inPlaylists.length,
+      style: { color: "green", 'border-color': "green" }
     });
     return this.createElement('div', {
       classes: "datagrid-cell cell-explicit-small deezier-token",
@@ -60,11 +62,13 @@ class ElementBuilder {
     });
   }
 
+  /* Elements related to the Deezier panel in the sidebar */
+
   static createBtnDetectInPlaylistTracks() {
     // A button to trigger the detection and adding of tokens to the already added tracks
     var btnDetectInPlaylistTracks = this.createElement("button", {
       inner: "Detect Added Tracks",
-      style: { padding: '5px', border: '1px solid', margin: '5px', 'margin-left': '20px'}
+      style: { padding: "5px", border: "1px solid", margin: "5px", 'margin-left': "20px" }
     });
     btnDetectInPlaylistTracks.addEventListener('click', () => DeezierArea.getInstance().appendInPlaylistTokens());
     return btnDetectInPlaylistTracks;
@@ -74,14 +78,14 @@ class ElementBuilder {
     // A searchbar element that will determine the content displayed in the 'library list' below
     var glass = this.createElement('div', {
       inner: "🔎",
-      style: {float: 'left', margin: '2px 8px 1px 2px'}
+      style: { float: "left", margin: "2px 8px 1px 2px" }
     });
     var searchField = this.createElement('input', {
-      attributes: {placeholder: "Search in playlists ...", type: "text"},
-      style : {'border-style': 'none', 'background-color': '#191922', 'color': '#a5a5ae'}
+      attributes: { placeholder: "Search in playlists ...", type: "text" },
+      style : { 'border-style': "none", 'background-color': "#191922", color: "#a5a5ae" }
     });
     var searchBar = this.createElement('div', {
-      style: {border: '1px solid', display: 'inline-block'},
+      style: { border: "1px solid", display: "inline-block" },
       children: [glass, searchField]}
     );
 
@@ -105,12 +109,8 @@ class ElementBuilder {
     expandButton.addEventListener("click", () => DeezierArea.getInstance().openDeezierPopup());
     return this.createElement('div', {
       style: {
-        'background-color': "#2d2d2d",
-	      width: "fit-content",
-	      'border-radius': "4px",
-	      border: "1px solid",
-        display: 'inline-block',
-        'margin-left': "2px"
+        'background-color': "#2d2d2d", width: "fit-content", 'border-radius': "4px",
+	      border: "1px solid", display: "inline-block", 'margin-left': "2px"
       },
       children: expandButton
     });
@@ -126,18 +126,13 @@ class ElementBuilder {
 
   static createLibraryList() {
     // The frame where the library list elements will live, to be filled later with these ones
-    var list = this.createElement('div', {
+    return this.createElement('div', {
       id: ID_LIBRARY_ELMT,
       style: {
-        height: '250px',
-        width: '211px',
-        'overflow-y': 'scroll',
-        border: '1px #aabbcc solid',
-        padding: '10px',
-        'margin-left': '5px'
+        height: "250px", width: "211px", 'overflow-y': "scroll",
+        border: "1px #aabbcc solid", padding: "10px", 'margin-left': "5px"
 	    }
     });
-    return list;
   }
 
   static createLibraryListElmts() {
@@ -174,7 +169,7 @@ class ElementBuilder {
         children.push(this.createElement('a', {
           innerHtml: `  ${branchStyle} <i><b>${track.title}</b></i> - ${track.artist_name}`,
           attributes: {href: track.url},
-          style: {'white-space': 'nowrap'}
+          style: { 'white-space': "nowrap" }
         }));
       });
       // elements in second serie under playlist name are matches on the artist name
@@ -184,7 +179,7 @@ class ElementBuilder {
         children.push(this.createElement('a', {
           innerHtml: `  ${branchStyle} <i><b>${track.title}</b></i> - ${track.artist_name}`,
           attributes: {href: track.url},
-          style: {'white-space': 'nowrap'}
+          style: { 'white-space': "nowrap" }
         }));
       });
       elmts.push(this.createElement('div', {
@@ -203,51 +198,57 @@ class ElementBuilder {
     return area;
   }
 
-  static createPopupPanel() {
-    // A popup that is spawned when the expand button is clicked, giving more space to display the library list items etc.
-    // header of the spawned popup panel
+  /* Elements related to the popup spawned when expand button is triggered */
+
+  static createPopupHeader() {
     const deezierTitle = this.createElement("div", {
       inner: "deezier",
       style: {
         font: "bold 3em Deezer",
         color: "white",
         display: "inline-block",
-        "padding-left": "23px"
+        'padding-left': "23px"
       }
     });
     const closePopupButton = this.createElement("button", {
       inner: "✕",
       style: {
-        "font-size": "2em",
+        'font-size': "2em",
         display: "inline-block",
         float: "right",
-        "padding-right": "10px"
+        'padding-right': "10px"
       }
     });
     closePopupButton.addEventListener("click", () => DeezierArea.getInstance().closeDeezierPopup());
-    const popupHeader = this.createElement("div", {
+    return this.createElement("div", {
       children: [deezierTitle, closePopupButton, this.createElement("hr")]
     });
-    // body of the popup
-    const popupBody = this.createElement("div");
+  }
+
+  static createPopupBody() {
+    return this.createElement("div");
+  }
+
+  static createPopupPanel() {
+    // A popup that is spawned when the expand button is clicked, giving more space to display the library list items etc.
+    const popupHeader = this.createPopupHeader();
+    const popupBody = this.createPopupBody();
 
     // build up header and body together in a popup element
-    const popupContainer = this.createElement("div", {
+    return this.createElement("div", {
       id: ID_POPUP_ELMT,
       style: {
         width: "1000px",
         height: "800px",
-        "z-index": "100",
+        'z-index': "100",
         position: "fixed",
         left: "500px",
         top: "100px",
-        "background-color": "#272731",
-        "border-radius": "9px"
+        'background-color': "#272731",
+        'border-radius': "9px"
       },
       children: [popupHeader, popupBody]
     });
-
-    return popupContainer;
   }
 
 }
