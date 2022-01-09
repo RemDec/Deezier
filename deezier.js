@@ -77,6 +77,19 @@ class ElementBuilder {
     return btnDetectInPlaylistTracks;
   }
 
+  static createBtnDetectSimilarTracks() {
+    // A button to trigger the detection and adding of tokens to the already added tracks
+    var btnDetectSimilarTracks = this.createElement("button", {
+      inner: "Detect Duplicate 🎵𝅘𝅥𝅮",
+      style: { padding: "5px", border: "1px solid", margin: "5px", 'margin-left': "20px" }
+    });
+    btnDetectSimilarTracks.addEventListener('click', () => {
+      const similarTracks = DeezierArea.getInstance().searchSimilarTracks();
+      DeezierArea.getInstance().setLibraryViewSimilarTracks(similarTracks);
+    })
+    return btnDetectSimilarTracks;
+  }
+
   static createSearchbar(forPopup=false) {
     // A searchbar element that will determine the content displayed in the 'library list' below
     var glass = this.createElement('div', {
@@ -152,6 +165,34 @@ class ElementBuilder {
         children: [playlistLinkElmt]
       }));
     }
+    return elmts;
+  }
+
+  static createSimilarTracksElmts(simTracks) {
+    var elmts = [];
+    var lib = DeezierArea.getInstance().getLibrary();
+    Object.entries(simTracks).map(([aId, simGroups]) => {
+      var artistName = lib.getArtistName(aId);
+      var children = [];
+      children.push(this.createElement('a', {
+        innerHtml:`<b>[<u style="background-color: #191922;">___${artistName} (${simGroups.length})___</u>]</b>`,
+        attributes: { href: "https://www.deezer.com/fr/artist/" + aId }
+      }));
+      simGroups.map((similars, i, {length}) => {
+        similars.map((track, j, {length}) => {
+          children.push(this.createElement('br'));
+          var branchStyle = i == length-1 ? (simGroups.length ? '┡' : '┗') : '┣';
+          children.push(this.createElement('a', {
+            innerHtml: `  ${branchStyle} <i><b>${track.title}</b></i> - ${track.inPlaylists.join('|')}`,
+            attributes: {href: "https://www.deezer.com/fr/track/" + track.track_id },
+            style: { 'white-space': "nowrap" }
+          }));
+        });
+      });
+      elmts.push(this.createElement('div', {
+        children: children
+      }));
+    });
     return elmts;
   }
 
@@ -234,9 +275,10 @@ class ElementBuilder {
 
   static createPopupBodyTopBar() {
     const searchBar = this.createSearchbar(true);
+    const btnSimilarTracks = this.createBtnDetectSimilarTracks();
     return this.createElement("div", {
       style: { height: "5%" },
-      children: [searchBar]
+      children: [searchBar, btnSimilarTracks]
     });
   }
 
@@ -661,6 +703,12 @@ class MusicLibrary {
     return this.artists[id] || null;
   }
 
+  getArtistName(artistId) {
+    const artist = this.getArtist(artistId);
+    if (!artist) { return null }
+    return artist['artist_name'];
+  }
+
   getArtistIds() {
     // Return the list of known artist ids in the library's artists index
     return Object.keys(this.artists);
@@ -886,6 +934,10 @@ class DeezierArea {
     return this.library.searchMathingTracks(tomatch);
   }
 
+  searchSimilarTracks(artistIds=[]) {
+    return this.library.getSimilarTracksGroupedByArtist(artistIds);
+  }
+
   cleanLibraryViews() {
     // Remove the content of the library view from its container
     const libraryElmt = ElementFinder.getLibrary();
@@ -912,6 +964,15 @@ class DeezierArea {
     ElementBuilder.createLibrarySearchResultsElmts(searchResults).map(p => {
       libraryElmt.appendChild(p);
       if (libraryPopupElmt) { libraryPopupElmt.appendChild(p.cloneNode(true)); }
+    });
+  }
+
+  setLibraryViewSimilarTracks(similarTracks) {
+    const [libraryElmt, libraryPopupElmt] = this.cleanLibraryViews();
+    console.log(similarTracks);
+    ElementBuilder.createSimilarTracksElmts(similarTracks).map(elmt => {
+      libraryElmt.appendChild(elmt);
+      if (libraryPopupElmt) { libraryPopupElmt.appendChild(elmt.cloneNode(true)); }
     });
   }
 
