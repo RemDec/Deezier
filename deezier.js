@@ -11,6 +11,9 @@
 const ID_LIBRARY_ELMT = 'deezier-library';
 const ID_SCROLL_MONITOR_ELMT = 'deezier-scrollelmt';
 const ID_POPUP_ELMT = 'deezier-popup';
+const ID_POPUP_HEADER = 'deezier-popup-header';
+const ID_POPUP_BODY = 'deezier-popup-body';
+const ID_POPUP_LIBRARY_ELMT = 'deezier-library-popup';
 
 class Util {
   /* Collection of useful functions for general purpose */
@@ -74,7 +77,7 @@ class ElementBuilder {
     return btnDetectInPlaylistTracks;
   }
 
-  static createSearchbar() {
+  static createSearchbar(forPopup=false) {
     // A searchbar element that will determine the content displayed in the 'library list' below
     var glass = this.createElement('div', {
       inner: "🔎",
@@ -82,10 +85,10 @@ class ElementBuilder {
     });
     var searchField = this.createElement('input', {
       attributes: { placeholder: "Search in playlists ...", type: "text" },
-      style : { 'border-style': "none", 'background-color': "#191922", color: "#a5a5ae" }
+      style : { 'border-style': "none", 'background-color': "#191922", color: "#a5a5ae", width: forPopup ? "300px" : "" }
     });
     var searchBar = this.createElement('div', {
-      style: { border: "1px solid", display: "inline-block" },
+      style: { border: "1px solid", display: "inline-block", margin: forPopup ? "10px 0px 0px 10px" : "" },
       children: [glass, searchField]}
     );
 
@@ -127,11 +130,13 @@ class ElementBuilder {
   static createLibraryList() {
     // The frame where the library list elements will live, to be filled later with these ones
     return this.createElement('div', {
-      id: ID_LIBRARY_ELMT,
       style: {
         height: "250px", width: "211px", 'overflow-y': "scroll",
         border: "1px #aabbcc solid", padding: "10px", 'margin-left': "5px"
-	    }
+	    },
+      children: this.createElement('div', {
+        id: ID_LIBRARY_ELMT
+      })
     });
   }
 
@@ -159,7 +164,7 @@ class ElementBuilder {
       var children = [];
       // name of playlist we fond results in
       children.push(this.createElement('a', {
-        innerHtml:`<b>[   ${playlist.title} (${results.title.length + results.artist.length})   ]</b>`,
+        innerHtml:`<b>[<u style="background-color: #191922;">___${playlist.title} (${results.title.length + results.artist.length})___</u>]</b>`,
         attributes: {href: playlist.url}
       }));
       // elements in first serie under playlist name are matches on the song title
@@ -221,12 +226,39 @@ class ElementBuilder {
     });
     closePopupButton.addEventListener("click", () => DeezierArea.getInstance().toggleDeezierPopup());
     return this.createElement("div", {
+      id: ID_POPUP_HEADER,
+      style: { height: "45px" },
       children: [deezierTitle, closePopupButton, this.createElement("hr")]
     });
   }
 
+  static createPopupBodyTopBar() {
+    const searchBar = this.createSearchbar(true);
+    return this.createElement("div", {
+      style: { height: "5%" },
+      children: [searchBar]
+    });
+  }
+
+  static createPopupBodyLibraryList() {
+    // A frame similar to the library list view in sidebar but it can leverage the space offered by the popup
+    const libList = ElementFinder.getLibrary().cloneNode(true);  // at creation consider same content as in sidebar
+    libList.id = ID_POPUP_LIBRARY_ELMT;
+    return this.createElement('div', {
+      style: {
+        height: "94%", 'overflow-y': "scroll",
+        border: "1px #aabbcc solid", padding: "10px", 'margin': "0px 5px 0px 5px"
+	    },
+      children: libList
+    });
+  }
+
   static createPopupBody() {
-    return this.createElement("div");
+    return this.createElement("div", {
+      id: ID_POPUP_BODY,
+      style: { height: "750px" },
+      children: [this.createPopupBodyTopBar(), this.createPopupBodyLibraryList()]
+    });
   }
 
   static createPopupPanel() {
@@ -292,7 +324,13 @@ class ElementFinder {
   }
 
   static getLibrary() {
+    // The current Deezier library list element on the sidebar
     return document.getElementById(ID_LIBRARY_ELMT);
+  }
+
+  static getPopupLibrary() {
+    // The current Deezier library list expanded in the popup if it was spawned
+    return document.getElementById(ID_POPUP_LIBRARY_ELMT);
   }
 
   static getDeezierPopup() {
@@ -848,25 +886,33 @@ class DeezierArea {
     return this.library.searchMathingTracks(tomatch);
   }
 
-  cleanLibraryView() {
+  cleanLibraryViews() {
     // Remove the content of the library view from its container
     const libraryElmt = ElementFinder.getLibrary();
     while (libraryElmt.firstChild) { libraryElmt.firstChild.remove(); }
-    return libraryElmt;
+    const libraryPopupElmt = ElementFinder.getPopupLibrary();
+    if (libraryPopupElmt) {  // Additionaly if the popup has been spawned ...
+      while (libraryPopupElmt.firstChild) { libraryPopupElmt.firstChild.remove(); }
+    }
+    return [libraryElmt, libraryPopupElmt];
   }
 
   setLibraryViewPlaylists() {
     // Fill in the library view with the list of user's playlists
-    const libraryElmt = this.cleanLibraryView();
-    libraryElmt.style.removeProperty('overflow-x');
-    ElementBuilder.createLibraryListElmts().map(p => libraryElmt.appendChild(p));
+    const [libraryElmt, libraryPopupElmt] = this.cleanLibraryViews();
+    ElementBuilder.createLibraryListElmts().map(p => {
+      libraryElmt.appendChild(p);
+      if (libraryPopupElmt) { libraryPopupElmt.appendChild(p.cloneNode(true)); }
+    });
   }
 
   setLibraryViewSearchResults(searchResults) {
     // Fill the library view with the results of a research done in the dedicated Deezier searchbar
-    const libraryElmt = this.cleanLibraryView();
-    libraryElmt.style['overflow-x'] = "scroll";
-    ElementBuilder.createLibrarySearchResultsElmts(searchResults).map(p => libraryElmt.appendChild(p));
+    const [libraryElmt, libraryPopupElmt] = this.cleanLibraryViews();
+    ElementBuilder.createLibrarySearchResultsElmts(searchResults).map(p => {
+      libraryElmt.appendChild(p);
+      if (libraryPopupElmt) { libraryPopupElmt.appendChild(p.cloneNode(true)); }
+    });
   }
 
   getLibrary() {
