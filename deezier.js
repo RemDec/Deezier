@@ -4,8 +4,8 @@
 // @match       https://www.deezer.*/*
 // @grant       none
 // @version     1.0
-// @author      -
-// @description Make Deezer better enhancing it with new features
+// @author      Kiprinite
+// @description Make Deezer better enhancing it with new useful features
 // ==/UserScript==
 
 const ID_LIBRARY_ELMT = 'deezier-library';
@@ -70,7 +70,7 @@ class ElementBuilder {
   static createBtnDetectInPlaylistTracks() {
     // A button to trigger the detection and adding of tokens to the already added tracks
     var btnDetectInPlaylistTracks = this.createElement("button", {
-      inner: "Detect Added Tracks",
+      inner: "Detect Added 🎵",
       style: { padding: "5px", border: "1px solid", margin: "5px", 'margin-left': "20px" }
     });
     btnDetectInPlaylistTracks.addEventListener('click', () => DeezierArea.getInstance().appendInPlaylistTokens());
@@ -80,7 +80,7 @@ class ElementBuilder {
   static createBtnDetectSimilarTracks() {
     // A button to trigger the detection and adding of tokens to the already added tracks
     var btnDetectSimilarTracks = this.createElement("button", {
-      inner: "Detect Duplicate 🎵𝅘𝅥𝅮",
+      inner: "Detect Duplicate 🎵",
       style: { padding: "5px", border: "1px solid", margin: "5px", 'margin-left': "20px" }
     });
     btnDetectSimilarTracks.addEventListener('click', () => {
@@ -104,7 +104,6 @@ class ElementBuilder {
       style: { border: "1px solid", display: "inline-block", margin: forPopup ? "10px 0px 0px 10px" : "" },
       children: [glass, searchField]}
     );
-
     searchField.addEventListener("keyup", e => {
       const tomatch = e.target.value;
       if (tomatch.length < 3) {
@@ -178,13 +177,18 @@ class ElementBuilder {
         innerHtml:`<b>[<u style="background-color: #191922;">___${artistName} (${simGroups.length})___</u>]</b>`,
         attributes: { href: "https://www.deezer.com/fr/artist/" + aId }
       }));
-      simGroups.map((similars, i, {length}) => {
-        similars.map((track, j, {length}) => {
+      simGroups.map((similars, i) => {
+        similars.map((track, j) => {
           children.push(this.createElement('br'));
-          var branchStyle = i == length-1 ? (simGroups.length ? '┡' : '┗') : '┣';
+          var branchStyle = '┣';
+          if (j == similars.length-1) {
+            branchStyle = '┡';
+            if (i == simGroups.length-1) { branchStyle = '┗'; }
+          }
+          var playlists = lib.getPlaylistsNameFromId(track.inPlaylists).sort();
           children.push(this.createElement('a', {
-            innerHtml: `  ${branchStyle} <i><b>${track.title}</b></i> - ${track.inPlaylists.join('|')}`,
-            attributes: {href: "https://www.deezer.com/fr/track/" + track.track_id },
+            innerHtml: `  ${branchStyle} <i><b>${track.title}</b></i> ∈ [ ${playlists.join(',')} ]`,
+            attributes: { href: "https://www.deezer.com/fr/track/" + track.track_id },
             style: { 'white-space': "nowrap" }
           }));
         });
@@ -214,7 +218,7 @@ class ElementBuilder {
         var branchStyle = i == length-1 ? (results.artist.length ? '┡' : '┗') : '┣';
         children.push(this.createElement('a', {
           innerHtml: `  ${branchStyle} <i><b>${track.title}</b></i> - ${track.artist_name}`,
-          attributes: {href: track.url},
+          attributes: { href: track.url },
           style: { 'white-space': "nowrap" }
         }));
       });
@@ -239,6 +243,7 @@ class ElementBuilder {
     // The global panel where Deezier's components live
     var area = document.createElement("div");
     area.appendChild(ElementBuilder.createBtnDetectInPlaylistTracks());
+    area.appendChild(ElementBuilder.createBtnDetectSimilarTracks());
     area.appendChild(ElementBuilder.createLibraryListTopBar());
     area.appendChild(ElementBuilder.createLibraryList());
     return area;
