@@ -6,6 +6,7 @@
 // @version     1.0
 // @author      Kiprinite
 // @description Make Deezer better enhancing it with new useful features
+// @license MIT
 // ==/UserScript==
 
 const ID_LIBRARY_ELMT = 'deezier-library';
