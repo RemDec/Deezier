@@ -65,7 +65,7 @@ class ElementBuilder {
       children: [tokenContent]
     });
   }
-
+  
   static createButton(text, cbFunction) {
     var btn = this.createElement("button", {
       inner: text,
@@ -86,13 +86,16 @@ class ElementBuilder {
     // A button to trigger the detection and adding of tokens to the already added tracks
     function callback() {
       const similarTracks = DeezierArea.getInstance().searchSimilarTracks();
-      DeezierArea.getInstance().setLibraryViewSimilarTracks(similarTracks);
+      DeezierArea.getInstance().setLibraryViewSimilarTracks(similarTracks);      
     }
     return this.createButton("Detect Duplicate 🎵", callback);
   }
-
+  
   static createBtnGetArtistsTop() {
-    return this.createButton("Show Top 🎤", () => DeezierArea.getInstance().getArtistsTop());
+    return this.createButton("Show Top 🎤", () => {
+      const topArtists = DeezierArea.getInstance().getArtistsTop();
+      DeezierArea.getInstance().setLibraryViewTopArtists(topArtists);
+    });
   }
 
   static createSearchbar(forPopup=false) {
@@ -204,6 +207,24 @@ class ElementBuilder {
     });
     return elmts;
   }
+  
+  static createTopArtistElmts(topArtists) {
+    const elmts = [];
+    var lib = DeezierArea.getInstance().getLibrary();
+    topArtists.map(artist => {
+      var artistName = lib.getArtistName(artist.artist_id);
+      var playlists = lib.getPlaylistsNameFromId(artist.inPlaylists).sort();
+      var line = this.createElement('a', {
+        innerHtml:`<b><u style="background-color: #191922;">${artistName}</u> (${artist.nbr_tracks} tracks)</b> ∈ [ ${playlists.join(', ')} ]`,
+        attributes: { href: "https://www.deezer.com/fr/artist/" + artist.artist_id },
+        style: { 'white-space': "nowrap" }
+      });
+      elmts.push(this.createElement('div', {
+        children: line
+      }));
+    });
+    return elmts;
+  }
 
   static createLibrarySearchResultsElmts(searchResults) {
     // From the results of a research made in the searchbar, build the items to fill in the library list displaying matches
@@ -287,9 +308,10 @@ class ElementBuilder {
   static createPopupBodyTopBar() {
     const searchBar = this.createSearchbar(true);
     const btnSimilarTracks = this.createBtnDetectSimilarTracks();
+    const btnTopArtists = this.createBtnGetArtistsTop();
     return this.createElement("div", {
       style: { height: "5%" },
-      children: [searchBar, btnSimilarTracks]
+      children: [searchBar, btnSimilarTracks, btnTopArtists]
     });
   }
 
@@ -749,7 +771,7 @@ class MusicLibrary {
     }
     return artist['albums'][albumId]['album_tracks'] || null;
   }
-
+  
   getAllAlbumsContentFromArtist(artistId) {
     const albums = this.getAlbumsFromArtist(artistId);
     const foundTracks = { };
@@ -863,7 +885,7 @@ class MusicLibrary {
     }
     return inPlaylists;
   }
-
+  
   getAllTracksByArtist(artistIds=[]) {
     var artistIds = artistIds.length ? artistIds : this.getArtistIds();
     const tracks = { };
@@ -876,7 +898,7 @@ class MusicLibrary {
     });
     return tracks;
   }
-
+  
   getStatisticsTopArtists(artistIds=[]) {
     const topToOrder = Object.entries(this.getAllTracksByArtist(artistIds)).map(([aId, tracks]) => {
       return { artist_id: aId, nbr_tracks: tracks.trackIds.length, inPlaylists: tracks.inPlaylists }
@@ -985,7 +1007,7 @@ class DeezierArea {
   searchSimilarTracks(artistIds=[]) {
     return this.library.getSimilarTracksGroupedByArtist(artistIds);
   }
-
+  
   getArtistsTop(artistIds=[]) {
     return this.library.getStatisticsTopArtists();
   }
@@ -1021,8 +1043,15 @@ class DeezierArea {
 
   setLibraryViewSimilarTracks(similarTracks) {
     const [libraryElmt, libraryPopupElmt] = this.cleanLibraryViews();
-    console.log(similarTracks);
     ElementBuilder.createSimilarTracksElmts(similarTracks).map(elmt => {
+      libraryElmt.appendChild(elmt);
+      if (libraryPopupElmt) { libraryPopupElmt.appendChild(elmt.cloneNode(true)); }
+    });
+  }
+  
+  setLibraryViewTopArtists(topArtists) {
+    const [libraryElmt, libraryPopupElmt] = this.cleanLibraryViews();
+    ElementBuilder.createTopArtistElmts(topArtists).map(elmt => {
       libraryElmt.appendChild(elmt);
       if (libraryPopupElmt) { libraryPopupElmt.appendChild(elmt.cloneNode(true)); }
     });
