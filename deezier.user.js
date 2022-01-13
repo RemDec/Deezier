@@ -66,29 +66,33 @@ class ElementBuilder {
     });
   }
 
+  static createButton(text, cbFunction) {
+    var btn = this.createElement("button", {
+      inner: text,
+      style: { padding: "5px", border: "1px solid", margin: "5px", 'margin-left': "20px" }
+    });
+    btn.addEventListener('click', () => cbFunction());
+    return btn;
+  }
+
   /* Elements related to the Deezier panel in the sidebar */
 
   static createBtnDetectInPlaylistTracks() {
     // A button to trigger the detection and adding of tokens to the already added tracks
-    var btnDetectInPlaylistTracks = this.createElement("button", {
-      inner: "Detect Added 🎵",
-      style: { padding: "5px", border: "1px solid", margin: "5px", 'margin-left': "20px" }
-    });
-    btnDetectInPlaylistTracks.addEventListener('click', () => DeezierArea.getInstance().appendInPlaylistTokens());
-    return btnDetectInPlaylistTracks;
+    return this.createButton("Detect Added 🎵", () => DeezierArea.getInstance().appendInPlaylistTokens());
   }
 
   static createBtnDetectSimilarTracks() {
     // A button to trigger the detection and adding of tokens to the already added tracks
-    var btnDetectSimilarTracks = this.createElement("button", {
-      inner: "Detect Duplicate 🎵",
-      style: { padding: "5px", border: "1px solid", margin: "5px", 'margin-left': "20px" }
-    });
-    btnDetectSimilarTracks.addEventListener('click', () => {
+    function callback() {
       const similarTracks = DeezierArea.getInstance().searchSimilarTracks();
       DeezierArea.getInstance().setLibraryViewSimilarTracks(similarTracks);
-    })
-    return btnDetectSimilarTracks;
+    }
+    return this.createButton("Detect Duplicate 🎵", callback);
+  }
+
+  static createBtnGetArtistsTop() {
+    return this.createButton("Show Top 🎤", () => DeezierArea.getInstance().getArtistsTop());
   }
 
   static createSearchbar(forPopup=false) {
@@ -245,6 +249,7 @@ class ElementBuilder {
     var area = document.createElement("div");
     area.appendChild(ElementBuilder.createBtnDetectInPlaylistTracks());
     area.appendChild(ElementBuilder.createBtnDetectSimilarTracks());
+    area.appendChild(ElementBuilder.createBtnGetArtistsTop());
     area.appendChild(ElementBuilder.createLibraryListTopBar());
     area.appendChild(ElementBuilder.createLibraryList());
     return area;
@@ -728,7 +733,7 @@ class MusicLibrary {
   }
 
   getAlbumTracksFromArtist(artistId, albumId, albumName=null) {
-    // From the known artists, return the album object if it exists by id, or the id of an exactly matching album title if
+    // From the known artists, return the album tracks object if it exists by id, or the id of an exactly matching album title if
     // the id doesn't exist anymore (it was returned by Deezer API which is inconsistent)
     const artist = this.getArtist(artistId);
     if (!artist) { return null }
@@ -743,6 +748,16 @@ class MusicLibrary {
       return matchingAlbum;
     }
     return artist['albums'][albumId]['album_tracks'] || null;
+  }
+
+  getAllAlbumsContentFromArtist(artistId) {
+    const albums = this.getAlbumsFromArtist(artistId);
+    const foundTracks = { };
+    if (albums === null) { return foundTracks; }
+    Object.values(albums).map(album => {
+      Object.assign(foundTracks, album['album_tracks']);
+    });
+    return foundTracks;
   }
 
   addArtist(artistId, artistName) {
@@ -849,6 +864,33 @@ class MusicLibrary {
     return inPlaylists;
   }
 
+  getAllTracksByArtist(artistIds=[]) {
+    var artistIds = artistIds.length ? artistIds : this.getArtistIds();
+    const tracks = { };
+    artistIds.map(aId => {
+      const albumContent = this.getAllAlbumsContentFromArtist(aId);
+      tracks[aId] = {
+        trackIds: Object.keys(albumContent),
+        inPlaylists: [... new Set(Object.values(albumContent).map(track => track.inPlaylists).flat())]
+      };
+    });
+    return tracks;
+  }
+
+  getStatisticsTopArtists(artistIds=[]) {
+    const topToOrder = Object.entries(this.getAllTracksByArtist(artistIds)).map(([aId, tracks]) => {
+      return { artist_id: aId, nbr_tracks: tracks.trackIds.length, inPlaylists: tracks.inPlaylists }
+    });
+    topToOrder.sort((a, b) => {
+      if (a.nbr_tracks < b.nbr_tracks) { return 1; }
+      if (a.nbr_tracks > b.nbr_tracks) { return -1; }
+      if (a.inPlaylists.length < b.inPlaylists.length) { return 1; }
+      else { return -1; }
+    })
+    console.log(topToOrder);
+    return topToOrder;
+  }
+
   /* Object methods */
 
   [Symbol.iterator]() {
@@ -944,6 +986,10 @@ class DeezierArea {
     return this.library.getSimilarTracksGroupedByArtist(artistIds);
   }
 
+  getArtistsTop(artistIds=[]) {
+    return this.library.getStatisticsTopArtists();
+  }
+
   cleanLibraryViews() {
     // Remove the content of the library view from its container
     const libraryElmt = ElementFinder.getLibrary();
@@ -1026,4 +1072,5 @@ function delayStart(delay=2000) {
 
 console.log("===== DEEZIER =====");
 delayStart();
+
 
