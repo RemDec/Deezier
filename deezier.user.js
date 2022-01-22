@@ -65,7 +65,7 @@ class ElementBuilder {
       children: [tokenContent]
     });
   }
-  
+
   static createButton(text, cbFunction) {
     var btn = this.createElement("button", {
       inner: text,
@@ -86,11 +86,11 @@ class ElementBuilder {
     // A button to trigger the detection and adding of tokens to the already added tracks
     function callback() {
       const similarTracks = DeezierArea.getInstance().searchSimilarTracks();
-      DeezierArea.getInstance().setLibraryViewSimilarTracks(similarTracks);      
+      DeezierArea.getInstance().setLibraryViewSimilarTracks(similarTracks);
     }
     return this.createButton("Detect Duplicate 🎵", callback);
   }
-  
+
   static createBtnGetArtistsTop() {
     return this.createButton("Show Top 🎤", () => {
       const topArtists = DeezierArea.getInstance().getArtistsTop();
@@ -207,15 +207,16 @@ class ElementBuilder {
     });
     return elmts;
   }
-  
+
   static createTopArtistElmts(topArtists) {
     const elmts = [];
     var lib = DeezierArea.getInstance().getLibrary();
     topArtists.map(artist => {
       var artistName = lib.getArtistName(artist.artist_id);
+      var fav = lib.isArtistFavorite(artist.artist_id) ? '♡&nbsp;' : '&emsp;';
       var playlists = lib.getPlaylistsNameFromId(artist.inPlaylists).sort();
       var line = this.createElement('a', {
-        innerHtml:`<b><u style="background-color: #191922;">${artistName}</u> (${artist.nbr_tracks} tracks)</b> ∈ [ ${playlists.join(', ')} ]`,
+        innerHtml:`<b><u style="background-color: #191922;">${fav}${artistName}</u> (${artist.nbr_tracks} tracks)</b> ∈ [ ${playlists.join(',&nbsp;')} ]`,
         attributes: { href: "https://www.deezer.com/fr/artist/" + artist.artist_id },
         style: { 'white-space': "nowrap" }
       });
@@ -600,7 +601,7 @@ class MusicLibrary {
     const response = await fetch(`${this.playlists[playlistId].url_tracks}&limit=1000`);
     const tracks = await response.json();
     return tracks.data.map(t => ({
-      track_id : t.id,
+      track_id: t.id,
       title: t.title,
       url: t.link,
       artist_id: t.artist.id,
@@ -609,6 +610,18 @@ class MusicLibrary {
       album_id: t.album.id,
       album_name: t.album.title,
       album_url: t.album.tracklist
+    }));
+  }
+
+  async fetchFavoriteArtists() {
+    // From the known user id, retrieve all his favorite artists to mark them in artists library
+    const response = await fetch(`https://api.deezer.com/user/${this.profileId}/artists&limit=1000`);
+    const artists = await response.json();
+    return artists.data.map(a => ({
+      artist_id: a.id,
+      artist_name: a.name,
+      time_added: a.time_add,
+      nbr_fans: a.nb_fan
     }));
   }
 
@@ -647,6 +660,19 @@ class MusicLibrary {
         }
       });
     }
+  }
+
+  async computeFavoriteArtists() {
+    const favArtists = await this.fetchFavoriteArtists();
+    console.log("Favorite artists ", favArtists);
+    favArtists.map(a => {
+      const artistEntry = this.getArtist(a.artist_id);
+      if (artistEntry) {
+        Object.assign(artistEntry, { favorite: true, time_added: a.time_added, nbr_fans: a.nbr_fans });
+      } else {
+        console.error("A favorite artist", a.artist_name, "(id", a.artist_id, ") isn't in the library");
+      }
+    });
   }
 
   /* Methods related to the playlist index */
@@ -742,6 +768,11 @@ class MusicLibrary {
     return artist['artist_name'];
   }
 
+  isArtistFavorite(id) {
+    const artist = this.getArtist(id);
+    return artist ? (artist.favorite === true) : null;
+  }
+
   getArtistIds() {
     // Return the list of known artist ids in the library's artists index
     return Object.keys(this.artists);
@@ -771,7 +802,7 @@ class MusicLibrary {
     }
     return artist['albums'][albumId]['album_tracks'] || null;
   }
-  
+
   getAllAlbumsContentFromArtist(artistId) {
     const albums = this.getAlbumsFromArtist(artistId);
     const foundTracks = { };
@@ -885,7 +916,7 @@ class MusicLibrary {
     }
     return inPlaylists;
   }
-  
+
   getAllTracksByArtist(artistIds=[]) {
     var artistIds = artistIds.length ? artistIds : this.getArtistIds();
     const tracks = { };
@@ -898,7 +929,7 @@ class MusicLibrary {
     });
     return tracks;
   }
-  
+
   getStatisticsTopArtists(artistIds=[]) {
     const topToOrder = Object.entries(this.getAllTracksByArtist(artistIds)).map(([aId, tracks]) => {
       return { artist_id: aId, nbr_tracks: tracks.trackIds.length, inPlaylists: tracks.inPlaylists }
@@ -909,7 +940,6 @@ class MusicLibrary {
       if (a.inPlaylists.length < b.inPlaylists.length) { return 1; }
       else { return -1; }
     })
-    console.log(topToOrder);
     return topToOrder;
   }
 
@@ -1007,7 +1037,7 @@ class DeezierArea {
   searchSimilarTracks(artistIds=[]) {
     return this.library.getSimilarTracksGroupedByArtist(artistIds);
   }
-  
+
   getArtistsTop(artistIds=[]) {
     return this.library.getStatisticsTopArtists();
   }
@@ -1048,7 +1078,7 @@ class DeezierArea {
       if (libraryPopupElmt) { libraryPopupElmt.appendChild(elmt.cloneNode(true)); }
     });
   }
-  
+
   setLibraryViewTopArtists(topArtists) {
     const [libraryElmt, libraryPopupElmt] = this.cleanLibraryViews();
     ElementBuilder.createTopArtistElmts(topArtists).map(elmt => {
@@ -1088,11 +1118,12 @@ async function process() {
   console.log("Retrieving playlists for user", userId, "...");
   await lib.computePlaylists();
   console.log("Retrieving tracks from all playlists in library ...");
-  lib.computeTracks(); // no await here to avoid blocking too much time
-  lib.display();
+  lib.computeTracks().then(() => {
+    console.log("Retrieving favorite artists ...");
+    lib.computeFavoriteArtists().then(() => lib.display());
+  }); // no await here to avoid blocking too much time, we can already inject in DOM what we have
   console.log("Injecting Deezier area in left side panel ...");
   area.injectInPage();
-  console.log("End Deezier process ...");
 }
 
 function delayStart(delay=2000) {
@@ -1101,5 +1132,4 @@ function delayStart(delay=2000) {
 
 console.log("===== DEEZIER =====");
 delayStart();
-
 
