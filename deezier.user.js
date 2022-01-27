@@ -497,6 +497,7 @@ class DOM_Monitor {
 
   static SCROLLING_OBS = 'scrolling';
   static PAGE_OBS = 'pageloading';
+  static PLAYING_TRACK_OBS = 'playingtrack';
 
   constructor() {
     this.observers = {};
@@ -562,6 +563,24 @@ class DOM_Monitor {
     };
     var options = isObfuscated ? { childList: true, subtree: true, attributes: false } : { };
     this.createObserver(DOM_Monitor.SCROLLING_OBS, elmtToMonitor, cbScrolling, options);
+    return true;
+  }
+  
+  createPlayingTrackObserver() {
+    const trackPlayer = ElementFinder.getCurrentTrackInPlayer()['track'];
+    if (!trackPlayer) { return false; }
+    function cbTrackChange(mutationsList) {
+      var trackChanged = false;
+      for(var mutation of mutationsList) {
+        if (mutation.type == 'childList') {
+          console.log('Changed track', mutation);
+          trackChanged = true;
+        }
+      }
+    if (trackChanged) { DeezierArea.getInstance().appendInPlaylistTokens(); }
+    };
+    const options = { childList: true, subtree: true, attributes: false };
+    this.createObserver(DOM_Monitor.PLAYING_TRACK_OBS, trackPlayer, cbTrackChange, options);
     return true;
   }
 
@@ -984,6 +1003,7 @@ class DeezierArea {
     // setup observers on DOM elements
     this.domObserver.createScrollingObserver();  // don't wait until we load a new page view to try it
     this.domObserver.createPageChangeObserver();
+    this.domObserver.createPlayingTrackObserver();
   }
 
   appendInPlaylistTokens() {
