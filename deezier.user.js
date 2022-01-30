@@ -42,14 +42,16 @@ class Util {
   static makeElementDraggable(elmt, fctShouldMove=null) {
     function moveElmt(e) {
       elmt.style.position = 'absolute';
-      elmt.style.top = e.clientY - 30 + 'px';
+      elmt.style.top = e.clientY + 'px';
       elmt.style.left = e.clientX - elmt.clientWidth/2 + 'px';
     }
     function mouseUp(e) {
       window.removeEventListener('mousemove', moveElmt, true);
+      document.body.style.setProperty('user-select', "initial");
     }
     function mouseDown(e) {
       if (fctShouldMove && !fctShouldMove()) { return; }
+      document.body.style = "user-select: none;";
       window.addEventListener('mousemove', moveElmt, true);
     }
     elmt.addEventListener('mousedown', mouseDown, false);
@@ -715,7 +717,7 @@ class MusicLibrary {
       if (artistEntry) {
         Object.assign(artistEntry, { favorite: true, time_added: a.time_added, nbr_fans: a.nbr_fans });
       } else {
-        console.error("A favorite artist", a.artist_name, "(id", a.artist_id, ") isn't in the library");
+        //console.error("A favorite artist", a.artist_name, "(id", a.artist_id, ") isn't in the library");
       }
     });
   }
@@ -941,7 +943,7 @@ class MusicLibrary {
         albumTracks = this.getAlbumTracksFromArtist(artistId, matchingAlbumId);
         console.log("Was unable to get album", albumId, albumName, "but found a match by name", matchingAlbumId, "where track", trackTitle, "is part of", albumTracks);
       } else if (albumTracks === null) {
-        console.error("While looking for track matching", trackTitle, ", didn't find any tracks in album", albumId, "of artist", artistId, this.getArtist(artistId));
+        //console.error("While looking for track matching", trackTitle, ", didn't find any tracks in album", albumId, "of artist", artistId, this.getArtist(artistId));
         albumTracks = {};
       }
       Object.entries(albumTracks).map(([id, albumTrack]) => {
@@ -1065,6 +1067,7 @@ class DeezierArea {
     var titleElmt = currTrackInfo.track;
 
     if (titleElmt.getAttribute('deezier-token')) {
+      titleElmt.removeAttribute('deezier-token');
       titleElmt.parentNode.getElementsByClassName('deezier-token')[0].remove();
     }
     var inPlaylistsId = this.library.getPlaylistsMatchingTrackFromArtist(currTrackInfo.artist_id, currTrackInfo.title, currTrackInfo.album_id);
