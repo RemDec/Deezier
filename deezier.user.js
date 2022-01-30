@@ -30,6 +30,31 @@ class Util {
     const href = elmt.getAttribute("href") || '';
     return href.split('/').pop() || null;
   }
+  
+  static getElementUnderPointer() {
+    const elmtsUnder = document.querySelectorAll(':hover');
+    if (elmtsUnder.length) {
+      return elmtsUnder[elmtsUnder.length - 1]
+    }
+    return null;
+  }
+  
+  static makeElementDraggable(elmt, fctShouldMove=null) {
+    function moveElmt(e) {
+      elmt.style.position = 'absolute';
+      elmt.style.top = e.clientY - 30 + 'px';
+      elmt.style.left = e.clientX - elmt.clientWidth/2 + 'px';
+    }
+    function mouseUp(e) {
+      window.removeEventListener('mousemove', moveElmt, true);
+    }
+    function mouseDown(e) {
+      if (fctShouldMove && !fctShouldMove()) { return; }
+      window.addEventListener('mousemove', moveElmt, true);
+    }
+    elmt.addEventListener('mousedown', mouseDown, false);
+    window.addEventListener('mouseup', mouseUp, false);
+  }
 
 }
 
@@ -343,7 +368,7 @@ class ElementBuilder {
     const popupBody = this.createPopupBody();
 
     // build up header and body together in a popup element
-    return this.createElement("div", {
+    const popup = this.createElement("div", {
       id: ID_POPUP_ELMT,
       style: {
         width: "1000px",
@@ -357,6 +382,8 @@ class ElementBuilder {
       },
       children: [popupHeader, popupBody]
     });
+    Util.makeElementDraggable(popup, () => Util.getElementUnderPointer() === popupHeader);
+    return popup;
   }
 
 }
@@ -572,8 +599,7 @@ class DOM_Monitor {
     function cbTrackChange(mutationsList) {
       var trackChanged = false;
       for(var mutation of mutationsList) {
-        if (mutation.type == 'childList') {
-          console.log('Changed track', mutation);
+        if (mutation.type == 'childList' && mutation.addedNodes.length) {
           trackChanged = true;
         }
       }
