@@ -220,9 +220,9 @@ class ElementBuilder {
             branchStyle = '┡';
             if (i == simGroups.length-1) { branchStyle = '┗'; }
           }
-          var playlists = lib.getPlaylistsNameFromId(track.inPlaylists).sort();
+          var playlists = lib.getPlaylistsNameFromId(track.inPlaylists, true).sort();
           children.push(this.createElement('a', {
-            innerHtml: `  ${branchStyle} <i><b>${track.title}</b></i> ∈ [ ${playlists.join(',')} ]`,
+            innerHtml: `  ${branchStyle} <i><b>${track.title}</b></i> ∈ [ ${playlists.join(',&nbsp;')} ]`,
             attributes: { href: "https://www.deezer.com/fr/track/" + track.track_id },
             style: { 'white-space': "nowrap" }
           }));
@@ -601,13 +601,13 @@ class DOM_Monitor {
     function cbTrackChange(mutationsList) {
       var trackChanged = false;
       for(var mutation of mutationsList) {
-        if (mutation.type == 'childList' && mutation.addedNodes.length) {
+        if (mutation.type == 'characterData') {
           trackChanged = true;
         }
       }
-    if (trackChanged) { DeezierArea.getInstance().appendInPlaylistTokens(); }
+      if (trackChanged) { DeezierArea.getInstance().appendInPlaylistTokens(); }
     };
-    const options = { childList: true, subtree: true, attributes: false };
+    const options = { childList: false, subtree: true, attributes: false, characterData: true };
     this.createObserver(DOM_Monitor.PLAYING_TRACK_OBS, trackPlayer, cbTrackChange, options);
     return true;
   }
@@ -742,12 +742,19 @@ class MusicLibrary {
     return false;
   }
 
-  getPlaylistsNameFromId(playlistIds, keepOmitted=false) {
+  getPlaylistsNameFromId(playlistIds, keepOmitted=false, fancyNames=true) {
     // From a playlist ids list, return the corresponding names (maybe discarding some non listable ones)
     if (!keepOmitted) {
       playlistIds = playlistIds.filter(pId => this.isPlaylistListable(pId));
     }
-    return playlistIds.map(pId => this.getPlaylist(pId).title);
+    
+    return playlistIds.map(pId => {
+      var title = this.getPlaylist(pId).title;
+      if (fancyNames) {
+        if (title === "Loved Tracks") { return "♡"; }
+      }
+      return title;
+    });
   }
 
   getTracksInPlaylist(playlistId, onlyTrackIds=true) {
@@ -1063,7 +1070,10 @@ class DeezierArea {
     }
     // 2. The current track in the player at the bottom
     const currTrackInfo = ElementFinder.getCurrentTrackInPlayer();
-    if (!currTrackInfo) { return null; }
+    if (!currTrackInfo) {
+      console.error("Unable to retrieve track currently playing");
+      return null;
+    }
     var titleElmt = currTrackInfo.track;
 
     if (titleElmt.getAttribute('deezier-token')) {
