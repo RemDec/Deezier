@@ -3,7 +3,7 @@
 // @namespace   Violentmonkey Scripts
 // @match       https://www.deezer.*/*
 // @grant       none
-// @version     1.0
+// @version     1.1
 // @author      Kiprinite
 // @description Make Deezer better enhancing it with new useful features
 // @license MIT
