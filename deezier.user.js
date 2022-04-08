@@ -23,12 +23,16 @@ class Util {
       // "Les stations balnéaires (version acoustique) [remix]" -> "lesstationsbalnaires"
       return str.replace(/[\[("].*[\])"]|\W/g, '').toLowerCase();
   }
+  
+  static idFromUrl(url) {
+    return url.split('/').pop() || null;
+  }
 
   static idFromHref(elmt) {
     // Isolate the part after last slash '/' of the href URL for the given element
     if (!elmt) { return console.error("Tried to retrieve id from href of an undefined element"); }
     const href = elmt.getAttribute("href") || '';
-    return href.split('/').pop() || null;
+    return Util.idFromUrl(href);
   }
   
   static getElementUnderPointer() {
@@ -483,12 +487,22 @@ class ElementFinder {
   static getTrackInfosFromElement(trackElement) {
     // Get the maximum information from a track element in the case it is obfuscated (no more id so we do the best)
     const titleElmt = trackElement.getElementsByClassName(this.OBFUSCATED.track_title)[0];
+    // Note: Deezer implemented stupid feature to number tracks, need to strip it
+    const titleText = titleElmt.querySelector(this.OBFUSCATED.track_title_only).innerText.replace(/^\d+\. /g, "");
     const albumElmt = trackElement.getElementsByClassName(this.OBFUSCATED.album)[0];
     const artistElmt = albumElmt.previousSibling;
+    var artistName = artistElmt.innerText;
+    var artistId = Util.idFromHref(artistElmt.firstElementChild.firstElementChild);
+    console.log(albumElmt, artistElmt);
+    if (artistElmt.getElementsByClassName(this.OBFUSCATED.track_title).length > 0) {
+      // Didn't manage to get artist elmt at the left of album (Deezer removed column on pages where artist is explicit like Artist's top tracks)
+      artistName = document.querySelector('meta[itemprop="name"]').content;
+      artistId = Util.idFromUrl(document.querySelector('meta[itemprop="url"]').content);
+    }
     return {
-      title: titleElmt.querySelector(this.OBFUSCATED.track_title_only).innerText, title_elmt: titleElmt,
+      title: titleText, title_elmt: titleElmt,
       album_name: albumElmt.innerText, album_id: Util.idFromHref(albumElmt.firstElementChild.firstElementChild),
-      artist_name: artistElmt.innerText, artist_id: Util.idFromHref(artistElmt.firstElementChild.firstElementChild)
+      artist_name: artistName, artist_id: artistId
     };
   }
 
@@ -1058,6 +1072,7 @@ class DeezierArea {
         inPlaylistsName = this.library.getPlaylistsContainingTrack(trackId);
       } else {  // likely we are in the case classnames are obfuscated
         const trackInfos = ElementFinder.getTrackInfosFromElement(track);  // cannot get directly track id, but we have artist/album id + name of the track
+        console.log("Track found :", trackInfos);
         titleElmt = trackInfos.title_elmt;
         var inPlaylistsId = this.library.getPlaylistsMatchingTrackFromArtist(trackInfos.artist_id, trackInfos.title, trackInfos.album_id, trackInfos.album_name);
         inPlaylistsName = this.library.getPlaylistsNameFromId(inPlaylistsId);
