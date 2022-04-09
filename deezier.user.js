@@ -400,7 +400,7 @@ class ElementFinder {
    * always used. We support both case, based on hardcoded obfuscated names. */
 
   static OBFUSCATED = {
-    container_tracks: 'YrLz6',
+    container_tracks: '_1r7b-',
     track_toplvl: 'JoTQr',
     track: 'ZLI1L',
     album: '_10fIC',
@@ -493,9 +493,9 @@ class ElementFinder {
     const artistElmt = albumElmt.previousSibling;
     var artistName = artistElmt.innerText;
     var artistId = Util.idFromHref(artistElmt.firstElementChild.firstElementChild);
-    console.log(albumElmt, artistElmt);
     if (artistElmt.getElementsByClassName(this.OBFUSCATED.track_title).length > 0) {
       // Didn't manage to get artist elmt at the left of album (Deezer removed column on pages where artist is explicit like Artist's top tracks)
+      // so try to find artist elsewhere
       artistName = document.querySelector('meta[itemprop="name"]').content;
       artistId = Util.idFromUrl(document.querySelector('meta[itemprop="url"]').content);
     }
@@ -1072,7 +1072,6 @@ class DeezierArea {
         inPlaylistsName = this.library.getPlaylistsContainingTrack(trackId);
       } else {  // likely we are in the case classnames are obfuscated
         const trackInfos = ElementFinder.getTrackInfosFromElement(track);  // cannot get directly track id, but we have artist/album id + name of the track
-        console.log("Track found :", trackInfos);
         titleElmt = trackInfos.title_elmt;
         var inPlaylistsId = this.library.getPlaylistsMatchingTrackFromArtist(trackInfos.artist_id, trackInfos.title, trackInfos.album_id, trackInfos.album_name);
         inPlaylistsName = this.library.getPlaylistsNameFromId(inPlaylistsId);
@@ -1194,7 +1193,7 @@ async function process() {
   console.log("Retrieving tracks from all playlists in library ...");
   lib.computeTracks().then(() => {
     console.log("Retrieving favorite artists ...");
-    lib.computeFavoriteArtists().then(() => lib.display());
+    lib.computeFavoriteArtists().then(() => {lib.display(); area.appendInPlaylistTokens()});
   }); // no await here to avoid blocking too much time, we can already inject in DOM what we have
   console.log("Injecting Deezier area in left side panel ...");
   area.injectInPage();
