@@ -588,6 +588,8 @@ class DOM_Monitor {
               if (!thisForCallback.createScrollingObserver()) {
                 console.log("New page view loaded but no element to monitor scrolling found in");
               }
+              // in all cases, let's try to add inPlaylist tokens
+              DeezierArea.getInstance().appendInPlaylistTokens();
             }
             setTimeout(newScrollingObs, 500);  // let the time for DOM to be filled in with components
           }
