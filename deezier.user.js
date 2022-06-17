@@ -24,13 +24,17 @@ class Util {
       return str.replace(/[\[("].*[\])"]|\W/g, '').toLowerCase();
   }
 
+  static idFromUrl(url) {
+    return url.split('/').pop() || null;
+  }
+
   static idFromHref(elmt) {
     // Isolate the part after last slash '/' of the href URL for the given element
     if (!elmt) { return console.error("Tried to retrieve id from href of an undefined element"); }
     const href = elmt.getAttribute("href") || '';
-    return href.split('/').pop() || null;
+    return Util.idFromUrl(href);
   }
-  
+
   static getElementUnderPointer() {
     const elmtsUnder = document.querySelectorAll(':hover');
     if (elmtsUnder.length) {
@@ -38,7 +42,7 @@ class Util {
     }
     return null;
   }
-  
+
   static makeElementDraggable(elmt, fctShouldMove=null) {
     function moveElmt(e) {
       elmt.style.position = 'absolute';
@@ -396,12 +400,12 @@ class ElementFinder {
    * always used. We support both case, based on hardcoded obfuscated names. */
 
   static OBFUSCATED = {
-    container_tracks: 'YrLz6',
+    container_tracks: '_1uDWG',
     track_toplvl: 'JoTQr',
-    track: 'ZLI1L',
+    track: '_2OACy',
     album: '_10fIC',
-    track_title: '_2tIhH',
-    track_title_only: '.BT3T6,._2QglM,._3cxEI'  // track_title can contain explicit 'E' token or InPlaylist 'V' token + special case track unavailable
+    track_title: '_1R22u',
+    track_title_only: 'AL075'  // track_title can contain explicit 'E' token or InPlaylist 'V' token + special case track unavailable
   };
 
   static getDeezerApp() {
@@ -480,15 +484,40 @@ class ElementFinder {
     return parseInt(urlToParse.substr(urlToParse.lastIndexOf('/')+1));
   }
 
+  static getArtistInfoFromPage() {
+    return {
+      artistName: document.querySelector('meta[itemprop="name"]').content,
+      artistId: Util.idFromUrl(document.querySelector('meta[itemprop="url"]').content)
+    }
+  }
+
   static getTrackInfosFromElement(trackElement) {
     // Get the maximum information from a track element in the case it is obfuscated (no more id so we do the best)
     const titleElmt = trackElement.getElementsByClassName(this.OBFUSCATED.track_title)[0];
-    const albumElmt = trackElement.getElementsByClassName(this.OBFUSCATED.album)[0];
-    const artistElmt = albumElmt.previousSibling;
+    // Note: Deezer implemented stupid feature to number tracks, need to strip it
+    const titleText = titleElmt.querySelector('.' + this.OBFUSCATED.track_title_only).innerText.replace(/^\d+\. /g, "");
+    const albumElmt = trackElement.querySelector("[data-testid='album']");
+    var albumName, albumId, artistName, artistId;
+    if (albumElmt === undefined) {
+      // We are probably on the artist's page where no album is displayed in track elements, try to get info elsewhere
+      var {artistName, artistId} = this.getArtistInfoFromPage();
+    } else {
+      albumName = albumElmt.innerText;
+      albumId = Util.idFromHref(albumElmt);
+      const artistElmt = trackElement.querySelector("[data-testid='artist']");
+      if (!artistElmt) {
+        // Didn't manage to get artist elmt at the left of album (Deezer removed column on pages where artist is explicit like Artist's top tracks)
+        var {artistName, artistId} = this.getArtistInfoFromPage();
+      } else {
+              artistName = artistElmt.innerText;
+      artistId = Util.idFromHref(artistElmt);
+      }
+    }
+
     return {
-      title: titleElmt.querySelector(this.OBFUSCATED.track_title_only).innerText, title_elmt: titleElmt,
-      album_name: albumElmt.innerText, album_id: Util.idFromHref(albumElmt.firstElementChild.firstElementChild),
-      artist_name: artistElmt.innerText, artist_id: Util.idFromHref(artistElmt.firstElementChild.firstElementChild)
+      title: titleText, title_elmt: titleElmt,
+      album_name: albumName, album_id: albumId,
+      artist_name: artistName, artist_id: artistId
     };
   }
 
@@ -560,6 +589,8 @@ class DOM_Monitor {
               if (!thisForCallback.createScrollingObserver()) {
                 console.log("New page view loaded but no element to monitor scrolling found in");
               }
+              // in all cases, let's try to add inPlaylist tokens
+              DeezierArea.getInstance().appendInPlaylistTokens();
             }
             setTimeout(newScrollingObs, 500);  // let the time for DOM to be filled in with components
           }
@@ -594,7 +625,7 @@ class DOM_Monitor {
     this.createObserver(DOM_Monitor.SCROLLING_OBS, elmtToMonitor, cbScrolling, options);
     return true;
   }
-  
+
   createPlayingTrackObserver() {
     const trackPlayer = ElementFinder.getCurrentTrackInPlayer()['track'];
     if (!trackPlayer) { return false; }
@@ -747,7 +778,7 @@ class MusicLibrary {
     if (!keepOmitted) {
       playlistIds = playlistIds.filter(pId => this.isPlaylistListable(pId));
     }
-    
+
     return playlistIds.map(pId => {
       var title = this.getPlaylist(pId).title;
       if (fancyNames) {
@@ -964,8 +995,8 @@ class MusicLibrary {
       });
       return [... new Set(inPlaylists)];
     } else {  // will walk through all known albums of the given artist
-      return Object.keys(this.getAlbumsFromArtist(artistId)).foreach(albumId => {
-        inPlaylists.push(... this.getMatchingTrackFromArtist(artistId, trackTitle, albumId, onlySimilarTracks));
+      Object.keys(this.getAlbumsFromArtist(artistId)).forEach(albumId => {
+        inPlaylists.push(... this.getPlaylistsMatchingTrackFromArtist(artistId, trackTitle, albumId, null, onlySimilarTracks));
       });
     }
     return inPlaylists;
@@ -1088,6 +1119,29 @@ class DeezierArea {
     }
   }
 
+  toggleDeezierPopup() {
+    // (De)spawn the deezier popup, where we have more space to display library & other Deezier stuff
+    const popupElmt = ElementFinder.getDeezierPopup();
+    if(popupElmt === null) {
+      ElementFinder.getDeezerApp().appendChild(ElementBuilder.createPopupPanel());
+    } else {
+      popupElmt.remove();
+    }
+  }
+
+  async refreshLibraryContent() {
+    console.log("Retrieving playlists for user", this.library.profileId, "...");
+    await this.library.computePlaylists();
+    console.log("Retrieving tracks from all playlists in library ...");
+    this.library.computeTracks().then(() => {
+      console.log("Retrieving favorite artists ...");
+      this.library.computeFavoriteArtists().then(() => {
+        this.library.display();
+        this.appendInPlaylistTokens();
+      });
+    }); // no await here to avoid blocking too much time, we can already inject in DOM what we have
+  }
+
   searchInLibrary(tomatch) {
     // From a given pattern, search in the built library for some matches on title/artist name
     return this.library.searchMathingTracks(tomatch);
@@ -1150,16 +1204,6 @@ class DeezierArea {
     return this.library;
   }
 
-  toggleDeezierPopup() {
-    // (De)spawn the deezier popup, where we have more space to display library & other Deezier stuff
-    const popupElmt = ElementFinder.getDeezierPopup();
-    if(popupElmt === null) {
-      ElementFinder.getDeezerApp().appendChild(ElementBuilder.createPopupPanel());
-    } else {
-      popupElmt.remove();
-    }
-  }
-
 }
 
 
@@ -1174,15 +1218,11 @@ async function process() {
   }
   var lib = new MusicLibrary(userId);
   var area = new DeezierArea(lib);
-  console.log("Retrieving playlists for user", userId, "...");
-  await lib.computePlaylists();
-  console.log("Retrieving tracks from all playlists in library ...");
-  lib.computeTracks().then(() => {
-    console.log("Retrieving favorite artists ...");
-    lib.computeFavoriteArtists().then(() => lib.display());
-  }); // no await here to avoid blocking too much time, we can already inject in DOM what we have
+
+  area.refreshLibraryContent();
+  // Inject Deezier panel with a little delay to be sure to have list of playlists already pulled
   console.log("Injecting Deezier area in left side panel ...");
-  area.injectInPage();
+  setTimeout(() => area.injectInPage(), 500);
 }
 
 function delayStart(delay=2000) {
@@ -1191,4 +1231,5 @@ function delayStart(delay=2000) {
 
 console.log("===== DEEZIER =====");
 delayStart();
+
 
