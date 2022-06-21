@@ -401,7 +401,7 @@ class ElementFinder {
 
   static OBFUSCATED = {
     container_tracks: '_1uDWG',
-    track_toplvl: 'JoTQr',
+    track_toplvl: '_2OACy',
     track: '_2OACy',
     album: '_10fIC',
     track_title: '_1R22u',
