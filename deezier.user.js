@@ -15,6 +15,7 @@ const ID_POPUP_ELMT = 'deezier-popup';
 const ID_POPUP_HEADER = 'deezier-popup-header';
 const ID_POPUP_BODY = 'deezier-popup-body';
 const ID_POPUP_LIBRARY_ELMT = 'deezier-library-popup';
+const ID_REFRESH_ELMT = 'deezier-refresh-btn';
 
 class Util {
   /* Collection of useful functions for general purpose */
@@ -297,6 +298,18 @@ class ElementBuilder {
     return elmts;
   }
 
+  static createLastRefreshElmt() {
+    var refreshButton = this.createElement('button', {
+      id: ID_REFRESH_ELMT,
+      innerText: "Last refresh at --:--"
+    });
+    refreshButton.onclick = () => { DeezierArea.getInstance().refreshLibraryContent() };
+    return this.createElement('div', {
+      style: { 'text-align': "right", 'padding-right': "15px", 'color': "#52525d" },
+      children: refreshButton
+    });
+  }
+
   static createDeezierPanelArea() {
     // The global panel where Deezier's components live
     var area = document.createElement("div");
@@ -305,6 +318,7 @@ class ElementBuilder {
     area.appendChild(ElementBuilder.createBtnGetArtistsTop());
     area.appendChild(ElementBuilder.createLibraryListTopBar());
     area.appendChild(ElementBuilder.createLibraryList());
+    area.appendChild(ElementBuilder.createLastRefreshElmt());
     return area;
   }
 
@@ -654,6 +668,7 @@ class MusicLibrary {
     this.profileId = profileId;
     this.playlists = {};  // index by playlist id
     this.artists = {};  // index by artist id
+    this.lastRefresh = null;
   }
 
   /* Pulling playlists & tracks from Deezer API and feed the library indexes (playlists + artists) */
@@ -751,6 +766,11 @@ class MusicLibrary {
         //console.error("A favorite artist", a.artist_name, "(id", a.artist_id, ") isn't in the library");
       }
     });
+  }
+
+  setLastRefresh() {
+    this.lastRefresh = new Date();
+    document.getElementById(ID_REFRESH_ELMT).innerText = `Last refresh at ${this.lastRefresh.getHours()}:${this.lastRefresh.getMinutes()}`;
   }
 
   /* Methods related to the playlist index */
@@ -1137,6 +1157,7 @@ class DeezierArea {
       console.log("Retrieving favorite artists ...");
       this.library.computeFavoriteArtists().then(() => {
         this.library.display();
+        this.library.setLastRefresh();
         this.appendInPlaylistTokens();
       });
     }); // no await here to avoid blocking too much time, we can already inject in DOM what we have
@@ -1225,7 +1246,7 @@ async function process() {
   setTimeout(() => area.injectInPage(), 500);
 }
 
-function delayStart(delay=2000) {
+function delayStart(delay=3000) {
   setTimeout(process, delay);
 }
 
