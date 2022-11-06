@@ -1,9 +1,11 @@
 # Deezier
 A native-JS userscript enhancing your experience listening music on Deezer with new useful features.
+It is usable on any user-script manager extension like Greasemonkey or Violentmonkey.
 
 ## Current features
 
-Deezier injects itself in the Deezer sidebar at the webpage loading. This center of command allows you to use all the features of Deezier :
+Deezier injects itself in the Deezer sidebar at the webpage loading when opening the web player.
+This center of command allows you to use all the features of Deezier :
 
 ![Overview of Deezier integration](./img/overview.png)
 
@@ -19,13 +21,13 @@ __List of supported features__ :
 - Detection of *duplicated tracks* of the same artists ("Everlong" and "Everlong (acoustic)" in the same playlist are likely an error)
 - Compiling a *top list of all artists* listenable in your playlists, even the ones you didn't put in your favorites
 
-*NOTE* : Deezier doesn't work on a dynamic way, meaning that if you add a track to a playlist, don't expect it to show up in the Deezier library until you do a refresh of the page.
+*NOTE* : Deezier doesn't work on a dynamic way, meaning that if you add a track to a playlist, don't expect it to show up in the Deezier library until you do a refresh (little button below playlists).
 
 *NOTE 2* : it can happen that a track in your playlists doesn't get detected as in because Deezer API return inconsitencies. A patch will be done if they don't repair it. 
 
 ## Installation
 
-Install an user-script manager like [Greasemokey](https://addons.mozilla.org/fr/firefox/addon/greasemonkey/) and [Violentmonkey](https://violentmonkey.github.io/get-it/) and simply load in the [script](./deezier.js). Deezier is JS-native and doesn't need any dependency.
+Install an user-script manager like [Greasemokey](https://addons.mozilla.org/fr/firefox/addon/greasemonkey/) and [Violentmonkey](https://violentmonkey.github.io/get-it/) and simply load in the [script](./deezier.user.js). Deezier is JS-native and doesn't need any dependency.
 
 🎵 Enjoy ! 🎵
 
@@ -35,5 +37,4 @@ TODO:
 - Caching using local storage
 - Feature : add songs to 'next to play' or in a customized user's playlist
 - Feature : play all new songs in notifications
-- Refresh library button
 - 'Add to playlist' button in player view
