@@ -3,7 +3,7 @@
 // @namespace   Violentmonkey Scripts
 // @match       https://www.deezer.*/*
 // @grant       none
-// @version     1.1
+// @version     1.2
 // @author      Kiprinite
 // @description Make Deezer better enhancing it with new useful features
 // @license MIT
@@ -303,7 +303,8 @@ class ElementBuilder {
       id: ID_REFRESH_ELMT,
       innerText: "Last refresh at --:--"
     });
-    refreshButton.onclick = () => { DeezierArea.getInstance().refreshLibraryContent() };
+    refreshButton.onclick = () => { DeezierArea.getInstance().refreshLibraryContent().then(
+      () => { DeezierArea.getInstance().setLibraryViewPlaylists() }) };
     return this.createElement('div', {
       style: { 'text-align': "right", 'padding-right': "15px", 'color': "#52525d" },
       children: refreshButton
@@ -465,11 +466,11 @@ class ElementFinder {
   static getCurrentTrackInPlayer() {
     // The track currently played in the player and info about it (cannot get track id directly)
     const player = this.getPlayer();
-    if (!player) { return null; }
+    if (!player) { console.error("Unable to get global player object"); return null; }
     const trackElmt = player.getElementsByClassName("track-title")[0];
-    if (!trackElmt) { return null; }
+    if (!trackElmt) { console.error("Unable to get track object in player", player); return null; }
     const [titleElmt, artistElmt] = trackElmt.getElementsByClassName("track-link");
-    if (!titleElmt || !artistElmt) { return null; }
+    if (!titleElmt || !artistElmt) { console.error("Unable to get info from track in player", trackElmt); return null; }
     return {
       track: trackElmt,
       artist_id: Util.idFromHref(artistElmt),
@@ -641,8 +642,9 @@ class DOM_Monitor {
   }
 
   createPlayingTrackObserver() {
-    const trackPlayer = ElementFinder.getCurrentTrackInPlayer()['track'];
+    var trackPlayer = ElementFinder.getCurrentTrackInPlayer();
     if (!trackPlayer) { return false; }
+    const trackElmt = trackPlayer['track'];
     function cbTrackChange(mutationsList) {
       var trackChanged = false;
       for(var mutation of mutationsList) {
@@ -653,7 +655,7 @@ class DOM_Monitor {
       if (trackChanged) { DeezierArea.getInstance().appendInPlaylistTokens(); }
     };
     const options = { childList: false, subtree: true, attributes: false, characterData: true };
-    this.createObserver(DOM_Monitor.PLAYING_TRACK_OBS, trackPlayer, cbTrackChange, options);
+    this.createObserver(DOM_Monitor.PLAYING_TRACK_OBS, trackElmt, cbTrackChange, options);
     return true;
   }
 
@@ -1243,10 +1245,10 @@ async function process() {
   area.refreshLibraryContent();
   // Inject Deezier panel with a little delay to be sure to have list of playlists already pulled
   console.log("Injecting Deezier area in left side panel ...");
-  setTimeout(() => area.injectInPage(), 500);
+  setTimeout(() => area.injectInPage(), 1000);
 }
 
-function delayStart(delay=3000) {
+function delayStart(delay=4000) {
   setTimeout(process, delay);
 }
 
